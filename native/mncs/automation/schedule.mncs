@@ -1,0 +1,258 @@
+mncs 0.17;
+
+// mncs.automation.schedule — deterministic next-occurrence calculation.
+//
+// A schedule answers one question: given everything at or before
+// `after_ms`, when is the next eligible instant? Occurrence sequences
+// derive from that answer plus a per-kind sequence rule, so identities
+// stay stable across restarts: the same definition evaluated at any
+// later time agrees on every past occurrence.
+//
+// Schedule kinds (codes shared with the host adapter):
+//   0 Pinned     fire once at `p1` (epoch ms); `p2` is the occurrence seq.
+//                One-shot definitions pin seq 1.
+//   1 Interval   fire every `p2` ms from anchor `p1`; seq counts periods.
+//   2 DailyUtc   fire daily at minute-of-day `p1` (UTC); seq counts days.
+//   3 DailyLocal wall-clock recurrence in a named timezone. The language
+//                has no timezone database, so native evaluation always
+//                reports no occurrence; the host bridge resolves these to
+//                Pinned descriptors with local-date sequence numbers.
+
+module mncs.automation.schedule.v1;
+
+use mncs.test.assertions;
+use mncs.test.suite;
+
+enum SchedKind { Pinned, Interval, DailyUtc, DailyLocal }
+
+record NextOccurrence { found: bool, at_ms: i64 }
+
+fn sched_kind_code(kind: SchedKind) -> (code: u64) {
+    return match kind {
+        Pinned => 0,
+        Interval => 1,
+        DailyUtc => 2,
+        DailyLocal => 3,
+    };
+}
+
+// Misfire policy codes live in mncs.automation.evaluation, which owns
+// firing policy; this module owns only time mapping.
+
+fn clamp_nonnegative(t_ms: i64) -> (result: i64) {
+    return select(t_ms >= 0, t_ms, 0);
+}
+
+fn saturating_add_ms(a_ms: i64, b_ms: i64) -> (result: i64) {
+    let base: i64 = clamp_nonnegative(a_ms);
+    let step: i64 = clamp_nonnegative(b_ms);
+    let max: i64 = 9223372036854775807;
+    if step > max - base {
+        return max;
+    }
+    return base +% step;
+}
+
+fn saturating_mul_ms(count: i64, period_ms: i64) -> (result: i64) {
+    let n: i64 = clamp_nonnegative(count);
+    let period: i64 = clamp_nonnegative(period_ms);
+    let max: i64 = 9223372036854775807;
+    if period == 0 {
+        return 0;
+    }
+    if n > max / period {
+        return max;
+    }
+    return n * period;
+}
+
+fn day_len_ms() -> (result: i64) {
+    return 86400000;
+}
+
+// Next eligible instant strictly after `after_ms`. Total: invalid
+// parameters report no occurrence instead of trapping.
+fn next_after(kind_code: u64, p1: i64, p2: i64, after_ms: i64) -> (result: NextOccurrence) {
+    let after: i64 = clamp_nonnegative(after_ms);
+    if kind_code == 0 {
+        if after < clamp_nonnegative(p1) {
+            return NextOccurrence { found: true, at_ms: clamp_nonnegative(p1) };
+        }
+        return NextOccurrence { found: false, at_ms: 0 };
+    }
+    if kind_code == 1 {
+        let anchor: i64 = clamp_nonnegative(p1);
+        let period: i64 = clamp_nonnegative(p2);
+        if period <= 0 {
+            return NextOccurrence { found: false, at_ms: 0 };
+        }
+        if after < anchor {
+            return NextOccurrence { found: true, at_ms: anchor };
+        }
+        let steps: i64 = (after -% anchor) / period +% 1;
+        return NextOccurrence { found: true, at_ms: saturating_add_ms(anchor, saturating_mul_ms(steps, period)) };
+    }
+    if kind_code == 2 {
+        let tod: i64 = clamp_nonnegative(p1);
+        if tod >= day_len_ms() {
+            return NextOccurrence { found: false, at_ms: 0 };
+        }
+        let day: i64 = clamp_nonnegative(after) / day_len_ms();
+        let today_at: i64 = day * day_len_ms() +% tod;
+        if after < today_at {
+            return NextOccurrence { found: true, at_ms: today_at };
+        }
+        return NextOccurrence { found: true, at_ms: saturating_add_ms(today_at, day_len_ms()) };
+    }
+    return NextOccurrence { found: false, at_ms: 0 };
+}
+
+// Sequence number of the occurrence firing exactly at `at_ms`.
+// Pinned carries its seq; Interval counts periods from the anchor;
+// DailyUtc counts epoch days (1-based, matching due counts below).
+fn seq_for(kind_code: u64, p1: i64, p2: i64, at_ms: i64) -> (seq: u64) {
+    let at: i64 = clamp_nonnegative(at_ms);
+    if kind_code == 0 {
+        return clamp_nonnegative(p2) as u64;
+    }
+    if kind_code == 1 {
+        let anchor: i64 = clamp_nonnegative(p1);
+        let period: i64 = clamp_nonnegative(p2);
+        if period <= 0 {
+            return 0;
+        }
+        if at < anchor {
+            return 0;
+        }
+        return ((at -% anchor) / period +% 1) as u64;
+    }
+    if kind_code == 2 {
+        return (at / day_len_ms() +% 1) as u64;
+    }
+    return 0;
+}
+
+// Instant at which sequence number `seq` fires (inverse of seq_for).
+// Returns 0 when the seq is invalid for the schedule.
+fn at_for_seq(kind_code: u64, p1: i64, p2: i64, seq: u64) -> (at_ms: i64) {
+    if seq == 0 {
+        return 0;
+    }
+    if kind_code == 0 {
+        if seq == clamp_nonnegative(p2) as u64 {
+            return clamp_nonnegative(p1);
+        }
+        return 0;
+    }
+    if kind_code == 1 {
+        let anchor: i64 = clamp_nonnegative(p1);
+        let period: i64 = clamp_nonnegative(p2);
+        if period <= 0 {
+            return 0;
+        }
+        return saturating_add_ms(anchor, saturating_mul_ms(seq as i64 -% 1, period));
+    }
+    if kind_code == 2 {
+        let tod: i64 = clamp_nonnegative(p1);
+        if tod >= day_len_ms() {
+            return 0;
+        }
+        return saturating_add_ms((seq as i64 -% 1) * day_len_ms(), tod);
+    }
+    return 0;
+}
+
+// Number of occurrences due at or before `now_ms` (1-based count, 0
+// when nothing is due yet). Restart-safe: depends only on the schedule
+// and `now`, never on stored state.
+fn current_seq(kind_code: u64, p1: i64, p2: i64, now_ms: i64) -> (seq: u64) {
+    let now: i64 = clamp_nonnegative(now_ms);
+    if kind_code == 0 {
+        if now >= clamp_nonnegative(p1) {
+            return clamp_nonnegative(p2) as u64;
+        }
+        return 0;
+    }
+    if kind_code == 1 {
+        let anchor: i64 = clamp_nonnegative(p1);
+        let period: i64 = clamp_nonnegative(p2);
+        if period <= 0 {
+            return 0;
+        }
+        if now < anchor {
+            return 0;
+        }
+        return ((now -% anchor) / period +% 1) as u64;
+    }
+    if kind_code == 2 {
+        let tod: i64 = clamp_nonnegative(p1);
+        if tod >= day_len_ms() {
+            return 0;
+        }
+        let day: i64 = now / day_len_ms();
+        let today_at: i64 = day * day_len_ms() +% tod;
+        if now >= today_at {
+            return (day +% 1) as u64;
+        }
+        return day as u64;
+    }
+    return 0;
+}
+
+test pinned_fires_once_then_nothing() -> (result: TestResult) {
+    let first: NextOccurrence = next_after(0, 1000, 1, 0);
+    let after: NextOccurrence = next_after(0, 1000, 1, 1000);
+    if first.found && first.at_ms == 1000 && after.found == false {
+        return from_assertion(equals_i64(1, 1, 5101));
+    }
+    return from_assertion(equals_i64(1, 0, 5101));
+}
+
+test interval_steps_are_exact() -> (result: TestResult) {
+    let third: NextOccurrence = next_after(1, 1000, 500, 2000);
+    if third.found && third.at_ms == 2500 {
+        return from_assertion(equals_i64(2500, third.at_ms, 5102));
+    }
+    return from_assertion(equals_i64(2500, third.at_ms, 5102));
+}
+
+test interval_rejects_zero_period() -> (result: TestResult) {
+    let none: NextOccurrence = next_after(1, 1000, 0, 0);
+    return from_assertion(equals_bool(false, none.found, 5103));
+}
+
+test daily_utc_advances_past_today() -> (result: TestResult) {
+    let tod: i64 = 5 * 3600000;
+    let late: NextOccurrence = next_after(2, tod, 0, 86400000 +% 6 * 3600000);
+    if late.found && late.at_ms == 2 * 86400000 +% tod {
+        return from_assertion(equals_i64(1, 1, 5104));
+    }
+    return from_assertion(equals_i64(1, 0, 5104));
+}
+
+test daily_local_defers_to_host() -> (result: TestResult) {
+    let deferred: NextOccurrence = next_after(3, 300, 0, 0);
+    return from_assertion(equals_bool(false, deferred.found, 5105));
+}
+
+test seq_round_trips_through_at() -> (result: TestResult) {
+    let at: i64 = at_for_seq(1, 1000, 500, 4);
+    let back: u64 = seq_for(1, 1000, 500, at);
+    if at == 2500 && back == 4 {
+        return from_assertion(equals_i64(4, back as i64, 5106));
+    }
+    return from_assertion(equals_i64(4, back as i64, 5106));
+}
+
+test current_seq_counts_due_occurrences() -> (result: TestResult) {
+    let cur: u64 = current_seq(1, 0, 1000, 2500);
+    return from_assertion(equals_i64(3, cur as i64, 5107));
+}
+
+test at_for_seq_inverts_current() -> (result: TestResult) {
+    let at: i64 = at_for_seq(2, 3600000, 0, 3);
+    if at == 2 * 86400000 +% 3600000 {
+        return from_assertion(equals_i64(1, 1, 5108));
+    }
+    return from_assertion(equals_i64(1, 0, 5108));
+}

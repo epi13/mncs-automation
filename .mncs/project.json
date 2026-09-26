@@ -1,0 +1,34 @@
+{
+  "schema_version": "mncs-family.repository-manifest/v0alpha1",
+  "repository": "mncs-automation",
+  "revision": 1,
+  "manifest_location": "in-repository",
+  "authority": {
+    "note": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems."
+  },
+  "organization": {
+    "layout": "mncs.repository-layout/1",
+    "surfaces": [
+      {"path": "docs/", "class": "canonical", "authority": "mncs-automation"},
+      {"path": "native/", "class": "canonical", "authority": "mncs-automation", "note": "Native time/schedule/trigger/evaluation semantics with self-contained test blocks."},
+      {"path": "tools/", "class": "host-boundary", "note": "Thin transport bridge: clocks, tzdata, atomic persistence, wakeup loop, condition observation, typed target execution, CLI. No decision logic."},
+      {"path": "tests/", "class": "canonical", "note": "Deterministic host suite over virtual time plus fixtures."}
+    ]
+  },
+  "contracts": {
+    "provides": [
+      {"contract": "automation-definition", "version": "1", "kind": "persistent-automation-definition", "stability": "experimental", "fingerprint_sources": ["tools/automation/model.py", "tests/test_automation.py"]},
+      {"contract": "automation-evaluation", "version": "1", "kind": "native-tick-decision", "stability": "experimental", "fingerprint_sources": ["native/", "tools/automation/native.py", "tests/test_automation.py"]},
+      {"contract": "automation-occurrence", "version": "1", "kind": "occurrence-and-invocation-record", "stability": "experimental", "fingerprint_sources": ["tools/automation/engine.py", "tests/test_automation.py"]}
+    ],
+    "consumes": [
+      {"contract": "mncs.compiler.call/1", "envelope": {"op": "any"}, "required": true},
+      {"contract": "mncs.compiler.test/1", "envelope": {"op": "any"}, "required": true},
+      {"contract": "mncs.compiler.declaration-inventory/1", "envelope": {"op": "any"}, "required": true},
+      {"contract": "mncs-doctor.report/1", "envelope": {"op": "any"}, "required": false}
+    ],
+    "tests": [
+      {"test": "automation-tests", "covers": ["automation-definition", "automation-evaluation", "automation-occurrence"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_automation"]}}
+    ]
+  }
+}

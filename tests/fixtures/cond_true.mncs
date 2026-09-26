@@ -1,0 +1,11 @@
+mncs 0.17;
+
+// Fixture condition program: always passes.
+module mncs.automation.fixture.cond_true.v1;
+
+use mncs.test.assertions;
+use mncs.test.suite;
+
+test always_true() -> (result: TestResult) {
+    return from_assertion(equals_bool(true, true, 9001));
+}

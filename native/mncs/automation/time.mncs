@@ -1,0 +1,129 @@
+mncs 0.17;
+
+// mncs.automation.time — total epoch-millisecond arithmetic for Automation.
+//
+// Instants are i64 milliseconds since the Unix epoch; durations are i64
+// millisecond counts. Both roles share one representation because the
+// language has no distinct time types; every function documents which
+// role each parameter plays. All inputs are clamped to the meaningful
+// domain (non-negative) so every function is total: no traps, no wraps,
+// saturation instead of overflow.
+//
+// The host supplies `now`; MNCS never reads a clock here. Tests inject
+// time as ordinary arguments, which keeps every schedule semantic
+// deterministic.
+
+module mncs.automation.time.v1;
+
+use mncs.test.assertions;
+use mncs.test.suite;
+
+// Largest representable instant. Inputs near it saturate instead of
+// overflowing; realistic epoch millis (~1.8e12) never come close.
+fn max_instant_ms() -> (result: i64) {
+    return 9223372036854775807;
+}
+
+fn millis_per_second() -> (result: i64) {
+    return 1000;
+}
+
+fn millis_per_minute() -> (result: i64) {
+    return 60000;
+}
+
+fn millis_per_hour() -> (result: i64) {
+    return 3600000;
+}
+
+fn millis_per_day() -> (result: i64) {
+    return 86400000;
+}
+
+// Negative instants have no meaning in automation schedules (the epoch
+// is the domain floor); they read as the epoch rather than wrapping.
+fn clamp_nonnegative(t_ms: i64) -> (result: i64) {
+    return select(t_ms >= 0, t_ms, 0);
+}
+
+// Saturating addition: pins at i64 MAX. Callers add only non-negative
+// durations to non-negative instants, so the single-sided guard suffices.
+fn saturating_add_ms(a_ms: i64, b_ms: i64) -> (result: i64) {
+    let base: i64 = clamp_nonnegative(a_ms);
+    let step: i64 = clamp_nonnegative(b_ms);
+    let max: i64 = max_instant_ms();
+    if step > max - base {
+        return max;
+    }
+    return base +% step;
+}
+
+// Saturating multiplication for period scaling. The divisor guard makes
+// the bound check total; a zero or negative period scales to zero.
+fn saturating_mul_ms(count: i64, period_ms: i64) -> (result: i64) {
+    let n: i64 = clamp_nonnegative(count);
+    let period: i64 = clamp_nonnegative(period_ms);
+    let max: i64 = max_instant_ms();
+    if period == 0 {
+        return 0;
+    }
+    if n > max / period {
+        return max;
+    }
+    return n * period;
+}
+
+// Whole days since the epoch (UTC day index). Monotonic and total.
+fn day_index(t_ms: i64) -> (result: i64) {
+    return clamp_nonnegative(t_ms) / millis_per_day();
+}
+
+// Start of the UTC day containing `t_ms`.
+fn day_start_ms(t_ms: i64) -> (result: i64) {
+    return day_index(t_ms) * millis_per_day();
+}
+
+// Milliseconds elapsed inside the UTC day containing `t_ms`.
+fn millis_into_day(t_ms: i64) -> (result: i64) {
+    return clamp_nonnegative(t_ms) -% day_start_ms(t_ms);
+}
+
+// Elapsed milliseconds from `since_ms` to `now_ms`, floored at zero:
+// a `since` in the future (clock skew) reads as zero age, never a wrap.
+fn elapsed_ms(since_ms: i64, now_ms: i64) -> (result: i64) {
+    return select(now_ms >= since_ms, now_ms -% since_ms, 0);
+}
+
+// True when `now_ms` has reached `deadline_ms`. Inclusive: an instant
+// exactly at its deadline has expired.
+fn expired_ms(deadline_ms: i64, now_ms: i64) -> (result: bool) {
+    return now_ms >= deadline_ms;
+}
+
+test saturation_pins_at_max() -> (result: TestResult) {
+    return from_assertion(equals_i64(9223372036854775807, saturating_add_ms(9223372036854775807, 1), 5001));
+}
+
+test saturation_scales_periods() -> (result: TestResult) {
+    return from_assertion(equals_i64(1000, saturating_mul_ms(10, 100), 5002));
+}
+
+test negative_instants_clamp_to_epoch() -> (result: TestResult) {
+    return from_assertion(equals_i64(0, day_index(0 -% 1), 5003));
+}
+
+test day_boundaries_are_exact() -> (result: TestResult) {
+    return from_assertion(equals_i64(86400000, day_start_ms(86400001), 5004));
+}
+
+test millis_into_day_splits_correctly() -> (result: TestResult) {
+    return from_assertion(equals_i64(3600000, millis_into_day(90000000), 5005));
+}
+
+test future_since_reads_as_zero_age() -> (result: TestResult) {
+    return from_assertion(equals_i64(0, elapsed_ms(200, 100), 5006));
+}
+
+test deadline_is_inclusive() -> (result: TestResult) {
+    return from_assertion(equals_bool(true, expired_ms(100, 100), 5007));
+}

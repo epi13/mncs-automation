@@ -1,0 +1,8 @@
+mncs 0.17;
+
+// Fixture target for Automation engine tests: a trivial typed call.
+module mncs.automation.fixture.tiny.v1;
+
+fn ping(value: i64) -> (result: i64) {
+    return value +% 1;
+}

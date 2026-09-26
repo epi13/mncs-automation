@@ -1,0 +1,109 @@
+mncs 0.17;
+
+// mncs.automation.trigger — condition values, edge semantics, lifecycle.
+//
+// Conditions are tri-state. FALSE and TRUE are observations; UNKNOWN
+// means the backend was unavailable, evidence was incomplete, or state
+// was stale. UNKNOWN is never silently converted: it never fires, and
+// on a rising edge it does not count as FALSE either, because treating
+// an outage as "condition was false" would fire automations the moment
+// a backend returns.
+//
+// Edge policies (codes shared with the host adapter):
+//   0 RisingEdge    fire on FALSE -> TRUE transitions only.
+//   1 WhileTrue     fire on every evaluation while TRUE.
+// A watch that fires records the observed value as `prev`, so replay
+// of the same observation never refires under RisingEdge.
+
+module mncs.automation.trigger.v1;
+
+use mncs.test.assertions;
+use mncs.test.suite;
+
+enum CondValue { False, True, Unknown }
+
+enum EdgePolicy { RisingEdge, WhileTrue }
+
+enum Lifecycle { Active, Paused, Completed, Expired, Invalid, Blocked }
+
+fn cond_code(value: CondValue) -> (code: u64) {
+    return match value {
+        False => 0,
+        True => 1,
+        Unknown => 2,
+    };
+}
+
+fn edge_code(policy: EdgePolicy) -> (code: u64) {
+    return match policy {
+        RisingEdge => 0,
+        WhileTrue => 1,
+    };
+}
+
+fn lifecycle_code(state: Lifecycle) -> (code: u64) {
+    return match state {
+        Active => 0,
+        Paused => 1,
+        Completed => 2,
+        Expired => 3,
+        Invalid => 4,
+        Blocked => 5,
+    };
+}
+
+// Whether `prev -> current` opens the edge. UNKNOWN anywhere closes it:
+// an unknown past is not a false past, and an unknown present is not a
+// true present.
+fn should_fire(edge: u64, prev: u64, current: u64) -> (fire: bool) {
+    if current == cond_code(CondValue.Unknown) {
+        return false;
+    }
+    if edge == edge_code(EdgePolicy.WhileTrue) {
+        return current == cond_code(CondValue.True);
+    }
+    if prev == cond_code(CondValue.False) && current == cond_code(CondValue.True) {
+        return true;
+    }
+    return false;
+}
+
+// Only Active automations evaluate. Lifecycle and last outcome stay
+// separate: Active with a failed invocation is still Active.
+fn may_evaluate(lifecycle: u64) -> (ok: bool) {
+    return lifecycle == lifecycle_code(Lifecycle.Active);
+}
+
+test rising_edge_fires_on_transition() -> (result: TestResult) {
+    return from_assertion(equals_bool(true, should_fire(0, 0, 1), 5201));
+}
+
+test rising_edge_ignores_repeat_true() -> (result: TestResult) {
+    return from_assertion(equals_bool(false, should_fire(0, 1, 1), 5202));
+}
+
+test rising_edge_ignores_unknown_past() -> (result: TestResult) {
+    return from_assertion(equals_bool(false, should_fire(0, 2, 1), 5203));
+}
+
+test unknown_present_never_fires() -> (result: TestResult) {
+    let rising: bool = should_fire(0, 0, 2);
+    let level: bool = should_fire(1, 1, 2);
+    if rising == false && level == false {
+        return from_assertion(equals_i64(1, 1, 5204));
+    }
+    return from_assertion(equals_i64(1, 0, 5204));
+}
+
+test while_true_fires_each_time() -> (result: TestResult) {
+    return from_assertion(equals_bool(true, should_fire(1, 1, 1), 5205));
+}
+
+test only_active_evaluates() -> (result: TestResult) {
+    let paused: bool = may_evaluate(1);
+    let active: bool = may_evaluate(0);
+    if paused == false && active {
+        return from_assertion(equals_i64(1, 1, 5206));
+    }
+    return from_assertion(equals_i64(1, 0, 5206));
+}
