@@ -71,7 +71,8 @@ MISFIRE_POLICIES = ("fire-now", "skip", "catch-up", "mark-missed")
 LIFECYCLES = ("active", "paused", "completed", "expired", "invalid", "blocked")
 EDGES = ("rising", "while-true")
 CONDITION_KINDS = ("test-verdict", "path-changed")
-TARGET_KINDS = ("mncs-test", "mncs-call", "doctor")
+TARGET_KINDS = ("mncs-test", "mncs-call", "doctor",
+                "environment-reconcile")
 
 MISFIRE_CODES = {
     "fire-now": MISFIRE_FIRE_NOW,

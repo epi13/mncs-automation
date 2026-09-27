@@ -164,21 +164,49 @@ def validate_target(target: Any) -> dict[str, Any]:
                 "module": target["module"], "function": target["function"],
                 "args": args, "grants": grants, "timeout_s": timeout,
                 "required_capabilities": required or ["call:execute"]}
-    _require(set(target) <= {"kind", "root", "changed_paths", "extra_args",
-                             "timeout_s", "required_capabilities"},
+    if kind == "doctor":
+        _require(set(target) <= {"kind", "root", "changed_paths",
+                                 "extra_args", "libraries", "timeout_s",
+                                 "required_capabilities"},
+                 "unknown target field")
+        root = target.get("root")
+        _require(isinstance(root, str) and root, "root required")
+        changed = target.get("changed_paths", [])
+        _require(isinstance(changed, list), "changed_paths must be a list")
+        extra = target.get("extra_args", [])
+        _require(isinstance(extra, list), "extra_args must be a list")
+        libraries = target.get("libraries", [])
+        _require(isinstance(libraries, list) and
+                 all(isinstance(item, str) for item in libraries),
+                 "libraries must be a string list")
+        timeout = target.get("timeout_s", 300)
+        _require(isinstance(timeout, int) and 1 <= timeout <= 3600,
+                 "timeout_s 1..3600")
+        return {"kind": kind, "root": root, "changed_paths": changed,
+                "extra_args": extra, "libraries": libraries,
+                "timeout_s": timeout,
+                "required_capabilities": required or ["doctor:read"]}
+    _require(set(target) <= {"kind", "environment_repo", "state_dir",
+                             "workspace", "libraries", "timeout_s",
+                             "required_capabilities"},
              "unknown target field")
-    root = target.get("root")
-    _require(isinstance(root, str) and root, "root required")
-    changed = target.get("changed_paths", [])
-    _require(isinstance(changed, list), "changed_paths must be a list")
-    extra = target.get("extra_args", [])
-    _require(isinstance(extra, list), "extra_args must be a list")
+    repo = target.get("environment_repo")
+    _require(isinstance(repo, str) and repo, "environment_repo required")
+    state_dir = target.get("state_dir")
+    _require(isinstance(state_dir, str) and state_dir, "state_dir required")
+    workspace = target.get("workspace", "")
+    _require(isinstance(workspace, str), "workspace must be a string")
+    libraries = target.get("libraries", [])
+    _require(isinstance(libraries, list) and
+             all(isinstance(item, str) for item in libraries),
+             "libraries must be a string list")
     timeout = target.get("timeout_s", 300)
     _require(isinstance(timeout, int) and 1 <= timeout <= 3600,
              "timeout_s 1..3600")
-    return {"kind": kind, "root": root, "changed_paths": changed,
-            "extra_args": extra, "timeout_s": timeout,
-            "required_capabilities": required or ["doctor:read"]}
+    return {"kind": kind, "environment_repo": repo, "state_dir": state_dir,
+            "workspace": workspace, "libraries": libraries,
+            "timeout_s": timeout,
+            "required_capabilities": required or ["environment:reconcile"]}
 
 
 def validate_typed_value(value: Any) -> None:

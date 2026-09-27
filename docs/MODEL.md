@@ -42,8 +42,11 @@ baseline and does not fire).
 
 Targets: `mncs-test`, `mncs-call {program, libraries, module, function,
 args (HostExecutionValue wire), grants}`, `doctor {root, changed_paths,
-extra_args (allowlisted)}`. Default required capabilities:
-`test:execute`, `call:execute` (+`grant-*` per grant), `doctor:read`.
+extra_args (allowlisted), libraries (evaluation only)}`,
+`environment-reconcile {environment_repo,
+state_dir, workspace, libraries (evaluation only)}`. Default required
+capabilities: `test:execute`, `call:execute` (+`grant-*` per grant),
+`doctor:read`, `environment:reconcile`.
 
 ## Shared codes (native `_code()` fns ↔ `tools/automation/codes.py`)
 

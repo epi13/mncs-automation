@@ -760,6 +760,7 @@ class DoctorTargetTests(EngineCase):
                 "trigger": {"kind": "schedule",
                             "schedule": {"kind": "one-shot", "at_ms": 5_000}},
                 "target": {"kind": "doctor", "root": str(REPO),
+                           "libraries": LIBRARIES,
                            "timeout_s": 300},
                 "granted_capabilities": ["doctor:read"]})
             report = self.tick(5_001)
@@ -771,6 +772,81 @@ class DoctorTargetTests(EngineCase):
             self.assertTrue(Path(outcome["result_artifact"]).is_file())
         finally:
             os.environ.pop("MNCS_DOCTOR_BIN", None)
+
+
+def find_environment_repo() -> str | None:
+    for candidate in (
+        os.environ.get("MNCS_ENVIRONMENT_REPO"),
+        str(WORKSPACE / "mncs-environment"),
+    ):
+        if candidate and Path(candidate, "scripts",
+                              "mncs-env").is_file():
+            return candidate
+    return None
+
+
+ENVIRONMENT_REPO = find_environment_repo()
+
+
+def need_environment(test):
+    return unittest.skipIf(ENVIRONMENT_REPO is None,
+                           "mncs-environment checkout unavailable")(test)
+
+
+class EnvironmentReconcileTargetTests(EngineCase):
+    def test_target_defaults_to_reconcile_capability(self) -> None:
+        clean = model.validate_target({
+            "kind": "environment-reconcile",
+            "environment_repo": "/x/mncs-environment",
+            "state_dir": "/x/state"})
+        self.assertEqual(clean["required_capabilities"],
+                         ["environment:reconcile"])
+
+    def test_policy_admits_and_denies_reconcile_kind(self) -> None:
+        from automation import targets as targets_mod
+        target = {"kind": "environment-reconcile",
+                  "environment_repo": "/x/mncs-environment",
+                  "state_dir": "/x/state", "workspace": "",
+                  "timeout_s": 120,
+                  "required_capabilities": ["environment:reconcile"]}
+        policy = open_policy()
+        policy["allowed_target_kinds"] = ["environment-reconcile"]
+        targets_mod.check_policy(target=target, policy=policy,
+                                 mncs_bin="mncs")
+        policy["allowed_target_kinds"] = ["doctor"]
+        with self.assertRaises(targets_mod.TargetError):
+            targets_mod.check_policy(target=target, policy=policy,
+                                     mncs_bin="mncs")
+
+    @need_environment
+    @need_mncs
+    def test_scheduled_reconcile_fires_and_reports(self) -> None:
+        assert ENVIRONMENT_REPO is not None
+        policy = open_policy()
+        policy["allowed_target_kinds"] = list(policy["allowed_target_kinds"])
+        policy["allowed_target_kinds"].append("environment-reconcile")
+        aid = self.define({
+            "schema_version": codes.DEFINITION_SCHEMA,
+            "name": "env-reconcile-proof",
+            "trigger": {"kind": "schedule",
+                        "schedule": {"kind": "one-shot", "at_ms": 5_000}},
+            "target": {"kind": "environment-reconcile",
+                       "environment_repo": ENVIRONMENT_REPO,
+                       "state_dir": str(self.tmp / "env-state"),
+                       "workspace": str(self.tmp),
+                       "libraries": LIBRARIES,
+                       "timeout_s": 120},
+            "granted_capabilities": ["environment:reconcile"]})
+        from automation import engine as engine_mod
+        report = engine_mod.tick(state_dir=self.state_dir, mncs=MNCS,
+                                 now_ms=5_001, policy=policy)
+        first = report["evaluated"][0]
+        self.assertEqual(first["decision"], "fired")
+        outcome = first["outcome"]
+        self.assertEqual(outcome["status"], "ok")
+        self.assertIn("observations", outcome)
+        self.assertTrue(Path(outcome["result_artifact"]).is_file())
+        self.assertEqual(self.occurrences(aid)[0]["decision"], "fired")
 
 
 class NativeSuiteTests(unittest.TestCase):

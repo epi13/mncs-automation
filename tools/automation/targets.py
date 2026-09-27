@@ -14,6 +14,9 @@ Target kinds:
   with capability grants passed only when granted.
 - doctor: `<doctor-binary> --root <root> doctor --json` plus an
   allowlisted subset of extra flags (read-only; never fix/migrate).
+- environment-reconcile: `<python> <environment-repo>/scripts/mncs-env
+  --state-dir <state-dir> reconciler --run-once [--workspace <dir>]`
+  with the JSON report captured to an automation-owned artifact file.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ REQUIRED_BY_KIND = {
     "mncs-test": ["test:execute"],
     "mncs-call": ["call:execute"],
     "doctor": ["doctor:read"],
+    "environment-reconcile": ["environment:reconcile"],
 }
 
 DOCTOR_EXTRA_ALLOWLIST = {"--changed-path", "--with-language-backend",
@@ -48,7 +52,8 @@ def check_policy(*, target: dict[str, Any], policy: dict[str, Any],
                           f"by policy")
     roots = [Path(root).resolve() for root in policy.get("program_roots", [])]
     if roots:
-        for key in ("program", "root"):
+        for key in ("program", "root", "environment_repo", "state_dir",
+                    "workspace"):
             value = target.get(key)
             if not value:
                 continue
@@ -145,7 +150,57 @@ def execute(*, target: dict[str, Any], mncs: str,
     if kind == "doctor":
         return _execute_doctor(target, artifacts_dir, invocation_id,
                                timeout_s)
+    if kind == "environment-reconcile":
+        return _execute_environment_reconcile(target, artifacts_dir,
+                                              invocation_id, timeout_s)
     raise TargetError(f"unknown target kind {kind}")
+
+
+def _execute_environment_reconcile(target: dict[str, Any],
+                                   artifacts_dir: Path,
+                                   invocation_id: str,
+                                   timeout_s: int | None) -> dict[str, Any]:
+    import subprocess
+    import sys
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    entry = Path(target["environment_repo"]) / "scripts" / "mncs-env"
+    if not entry.is_file():
+        return {"status": "unknown", "reason": "missing-environment-entry",
+                "note": str(entry)}
+    # Fixed argv shape from typed fields only: no shell, no templates.
+    command = [sys.executable, str(entry), "--state-dir",
+               target["state_dir"], "reconciler", "--run-once"]
+    if target.get("workspace"):
+        command += ["--workspace", target["workspace"]]
+    try:
+        completed = subprocess.run(
+            command, capture_output=True, text=True,
+            timeout=timeout_s or target.get("timeout_s", 300))
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"status": "unknown", "reason": "runner-unreachable",
+                "note": str(error)}
+    artifact = artifacts_dir / f"{invocation_id}.env-reconcile.json"
+    artifact.write_text(completed.stdout, encoding="utf-8")
+    try:
+        report = json.loads(completed.stdout or "{}")
+    except ValueError:
+        return {"status": "unknown", "reason": "undecodable-result",
+                "exit_code": completed.returncode,
+                "stderr": completed.stderr.strip()[-500:],
+                "result_artifact": str(artifact)}
+    if completed.returncode != 0:
+        return {"status": "failed", "reason": "reconciler-error",
+                "exit_code": completed.returncode,
+                "stderr": completed.stderr.strip()[-500:],
+                "result_artifact": str(artifact)}
+    sources = report.get("sources", [])
+    observations = sum(len(item.get("observations", []) or [])
+                       for item in sources if isinstance(item, dict))
+    return {"status": "ok", "observations": observations,
+            "reset": report.get("reset", False),
+            "unknown_sources": report.get("unknown_sources", []),
+            "duration_s": report.get("duration_s"),
+            "result_artifact": str(artifact)}
 
 
 def _execute_test(target: dict[str, Any], mncs: str,
