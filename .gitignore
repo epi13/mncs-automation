@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .automation-state/
+.mncs/cache/
+.mncs/doctor/
