@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Provider entrypoint for native projection planning (transport only).
+"""Provider entrypoint for native projection decisions (transport only).
 
-Reads one JSON plan request, calls native
-`mncs.automation.projection.v1::plan_tick`, and prints the
-`mncs.reconcile-plan/1` envelope on stdout. All policy lives in the
-native module; this script encodes arguments and decodes the plan.
+Verbs:
+  plan     native `mncs.automation.projection.v1::plan_tick` ->
+           `mncs.reconcile-plan/1` envelope.
+  adopt    native `mncs.automation.reconcile.v1::adopt_observed` ->
+           `mncs.adopt-decision/1` envelope.
+  revisit  native `mncs.automation.projection.v1::revisit_tick` ->
+           `mncs.revisit-decision/1` envelope.
 
-Request keys (all integers; see docs/MODEL.md for code tables):
+All policy lives in the native modules; this script encodes arguments
+and decodes decisions.
+
+Plan request keys (all integers; see docs/MODEL.md for code tables):
   canonical_gen, observed_gen, inputs_changed, verdict,
   require_verified, repo, branch, claim, target, region, output,
   splice_ok, defer_count, defer_bound, unpublished, threshold,
   oldest_unpublished_ms, now_ms, max_latency_ms
-plus optional "projection" carried through to the envelope.
+Adopt request keys: observed_gen, regenerated_gen, canonical_gen.
+Revisit request keys: wait, event.
+Each request may carry optional "projection" through to the envelope.
 """
 
 from __future__ import annotations
@@ -96,9 +104,47 @@ def plan(request: dict, mncs: str, timeout_s: int) -> dict:
     return envelope
 
 
+def adopt(request: dict, mncs: str, timeout_s: int) -> dict:
+    fields = {}
+    for name in ("observed_gen", "regenerated_gen", "canonical_gen"):
+        if name not in request:
+            raise ValueError(f"adopt request missing {name!r}")
+        fields[name] = int(request[name])
+    result = native.adopt_observed(mncs=mncs, libraries=libraries(),
+                                   timeout_s=timeout_s, **fields)
+    return {
+        "schema_version": codes.ADOPT_SCHEMA,
+        "projection": request.get("projection"),
+        "accept": bool(result["accept"]),
+        "new_observed": result["new_observed"],
+        "reason": result["reason"],
+        "reason_name": codes.ADOPT_REASON_NAMES.get(
+            result["reason"], "unknown"),
+    }
+
+
+def revisit(request: dict, mncs: str, timeout_s: int) -> dict:
+    for name in ("wait", "event"):
+        if name not in request:
+            raise ValueError(f"revisit request missing {name!r}")
+    decision = native.revisit_tick(
+        mncs=mncs, libraries=libraries(), timeout_s=timeout_s,
+        wait=int(request["wait"]), event=int(request["event"]))
+    return {
+        "schema_version": codes.REVISIT_SCHEMA,
+        "projection": request.get("projection"),
+        "wait": int(request["wait"]),
+        "wait_name": codes.WAIT_NAMES.get(int(request["wait"]), "unknown"),
+        "event": int(request["event"]),
+        "event_name": codes.REVISIT_EVENT_NAMES.get(
+            int(request["event"]), "unknown"),
+        "revisit": bool(decision),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("verb", choices=("plan",))
+    parser.add_argument("verb", choices=("plan", "adopt", "revisit"))
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--mncs", type=str, default=None)
     parser.add_argument("--timeout", type=int, default=120)
@@ -106,13 +152,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         request = json.loads(args.request.read_text(encoding="utf-8"))
         if not isinstance(request, dict):
-            raise ValueError("plan request must be a JSON object")
+            raise ValueError(f"{args.verb} request must be a JSON object")
         binary = find_mncs(args.mncs)
         if binary is None:
             raise ValueError("mncs compiler binary unavailable")
-        print(json.dumps(plan(request, binary, args.timeout)))
+        if args.verb == "plan":
+            print(json.dumps(plan(request, binary, args.timeout)))
+        elif args.verb == "adopt":
+            print(json.dumps(adopt(request, binary, args.timeout)))
+        else:
+            print(json.dumps(revisit(request, binary, args.timeout)))
     except (OSError, ValueError, native.NativeError) as error:
-        print(f"reconcile plan failed: {error}", file=sys.stderr)
+        print(f"reconcile {args.verb} failed: {error}", file=sys.stderr)
         return 2
     return 0
 

@@ -202,3 +202,47 @@ OUTPUT_MATCHES_FRESH = 1
 OUTPUT_MATCHES_LAST_RENDER = 2
 OUTPUT_DIVERGED = 3
 OUTPUT_UNKNOWN = 4
+
+# Adoption (native/mncs/automation/reconcile.mncs adopt_observed).
+ADOPT_SCHEMA = "mncs.adopt-decision/1"
+
+ADOPT_REASON_NAMES = {
+    0: "adopted",
+    1: "stale-regeneration",
+    2: "regression-refused",
+}
+
+# Revisit waits/events (native/mncs/automation/projection.mncs
+# revisit_tick). The host observes the event and recalls the wait;
+# the wake matrix is native policy.
+REVISIT_SCHEMA = "mncs.revisit-decision/1"
+
+WAIT_NONE = 0
+WAIT_CLAIM = 1
+WAIT_VERIFICATION = 2
+WAIT_PROVIDER = 3
+WAIT_REPO_STATE = 4
+
+REVISIT_EVENT_TICK = 0
+REVISIT_EVENT_CLAIM_CHANGED = 1
+REVISIT_EVENT_VERDICT_RESOLVED = 2
+REVISIT_EVENT_PROVIDER_CHANGED = 3
+REVISIT_EVENT_REPO_CHANGED = 4
+REVISIT_EVENT_DECLARATION_CHANGED = 5
+
+WAIT_NAMES = {
+    0: "none",
+    1: "claim",
+    2: "verification",
+    3: "provider",
+    4: "repo-state",
+}
+
+REVISIT_EVENT_NAMES = {
+    0: "tick",
+    1: "claim-changed",
+    2: "verdict-resolved",
+    3: "provider-changed",
+    4: "repo-changed",
+    5: "declaration-changed",
+}

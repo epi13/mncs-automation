@@ -286,3 +286,26 @@ def adopt_observed(*, mncs: str, libraries: list[str] | None = None,
         if key not in decision:
             raise NativeError(f"native adopt decision missing {key}")
     return decision
+
+
+def revisit_tick(*, mncs: str, libraries: list[str] | None = None,
+                 timeout_s: int = 60, wait: int, event: int) -> bool:
+    """Call native `revisit_tick`; return whether to reconsider."""
+    args = [{"integer": {"value": int(wait)}},
+            {"integer": {"value": int(event)}}]
+    document = call_function(
+        mncs=mncs,
+        program=PROJECTION_PROGRAM,
+        module=PROJECTION_MODULE,
+        function="revisit_tick",
+        args=args,
+        libraries=default_libraries((libraries or []) + [str(NATIVE_DIR)]),
+        timeout_s=timeout_s,
+    )
+    if document.get("status") != "returned":
+        raise NativeError(f"native revisit failed: "
+                          f"{document.get('error', document)}")
+    decision = decode_record(document["call"]["returned"])
+    if not isinstance(decision, bool):
+        raise NativeError(f"native revisit returned non-bool {decision!r}")
+    return decision

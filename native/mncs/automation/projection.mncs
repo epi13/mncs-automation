@@ -37,6 +37,18 @@ mncs 0.17;
 //   region: 0 missing, 1 invalid, 2 valid, 3 not-applicable.
 //   output: 0 missing, 1 matches-fresh, 2 matches-last-render,
 //           3 diverged, 4 unknown.
+//
+// `revisit_tick` answers "does this world event warrant reconsidering a
+// pending projection?" for continuous operation without polling. The
+// host observes the event and recalls what the projection waits on;
+// this function owns the wake matrix. A bare tick never revisits: the
+// epoch path already covers unchanged worlds, so quiet stays quiet.
+// A declaration change revisits any wait, because render inputs may
+// have new meaning. A claim change also revisits repo-state waits: a
+// release often coincides with the occupier finishing their dirt.
+//   wait: 0 none, 1 claim, 2 verification, 3 provider, 4 repo-state.
+//   event: 0 tick, 1 claim-changed, 2 verdict-resolved,
+//          3 provider-changed, 4 repo-changed, 5 declaration-changed.
 
 module mncs.automation.projection.v1;
 
@@ -59,6 +71,23 @@ enum GateReason {
     EscalateUnknownRepo,
     DeferredOutputDiverged,
     EscalateDeferralExhausted
+}
+
+enum WaitReason {
+    None,
+    Claim,
+    Verification,
+    Provider,
+    RepoState
+}
+
+enum RevisitEvent {
+    Tick,
+    ClaimChanged,
+    VerdictResolved,
+    ProviderChanged,
+    RepoChanged,
+    DeclarationChanged
 }
 
 record GateVerdict { gate: u64, reason: u64 }
@@ -200,6 +229,59 @@ fn plan_tick(
     };
 }
 
+fn wait_code(wait: WaitReason) -> (code: u64) {
+    return match wait {
+        None => 0,
+        Claim => 1,
+        Verification => 2,
+        Provider => 3,
+        RepoState => 4,
+    };
+}
+
+fn event_code(event: RevisitEvent) -> (code: u64) {
+    return match event {
+        Tick => 0,
+        ClaimChanged => 1,
+        VerdictResolved => 2,
+        ProviderChanged => 3,
+        RepoChanged => 4,
+        DeclarationChanged => 5,
+    };
+}
+
+// Whether a pending projection should be reconsidered now. Each wait
+// wakes only on the events that can resolve it; unknown codes never
+// revisit, so a host that invents codes fails closed into quiet.
+fn revisit_tick(wait: u64, event: u64) -> (revisit: bool) {
+    if wait == wait_code(WaitReason.None) {
+        return false;
+    }
+    if event == event_code(RevisitEvent.DeclarationChanged) {
+        return wait == wait_code(WaitReason.Claim)
+            || wait == wait_code(WaitReason.Verification)
+            || wait == wait_code(WaitReason.Provider)
+            || wait == wait_code(WaitReason.RepoState);
+    }
+    if event == event_code(RevisitEvent.Tick) {
+        return false;
+    }
+    if wait == wait_code(WaitReason.Claim) {
+        return event == event_code(RevisitEvent.ClaimChanged);
+    }
+    if wait == wait_code(WaitReason.Verification) {
+        return event == event_code(RevisitEvent.VerdictResolved);
+    }
+    if wait == wait_code(WaitReason.Provider) {
+        return event == event_code(RevisitEvent.ProviderChanged);
+    }
+    if wait == wait_code(WaitReason.RepoState) {
+        return event == event_code(RevisitEvent.RepoChanged)
+            || event == event_code(RevisitEvent.ClaimChanged);
+    }
+    return false;
+}
+
 fn plans_equal(left: ProjectionPlan, right: ProjectionPlan) -> (equal: bool) {
     return left.gate == right.gate
         && left.gate_reason == right.gate_reason
@@ -336,4 +418,56 @@ test plan_withholds_failed_verification() -> (result: TestResult) {
     let ok: bool = plan.action == action_code(ReconAction.FailedVerification)
         && plan.execute == false;
     return from_assertion(equals_bool(true, ok, 5614));
+}
+
+test revisit_claim_wait_wakes_on_claim_change_only() -> (result: TestResult) {
+    let claim: u64 = wait_code(WaitReason.Claim);
+    let ok: bool = revisit_tick(claim, event_code(RevisitEvent.ClaimChanged))
+        && revisit_tick(claim, event_code(RevisitEvent.RepoChanged)) == false
+        && revisit_tick(claim, event_code(RevisitEvent.VerdictResolved)) == false
+        && revisit_tick(claim, event_code(RevisitEvent.Tick)) == false;
+    return from_assertion(equals_bool(true, ok, 5615));
+}
+
+test revisit_verification_wait_wakes_on_verdict_only() -> (result: TestResult) {
+    let wait: u64 = wait_code(WaitReason.Verification);
+    let ok: bool = revisit_tick(wait, event_code(RevisitEvent.VerdictResolved))
+        && revisit_tick(wait, event_code(RevisitEvent.ClaimChanged)) == false
+        && revisit_tick(wait, event_code(RevisitEvent.ProviderChanged)) == false
+        && revisit_tick(wait, event_code(RevisitEvent.Tick)) == false;
+    return from_assertion(equals_bool(true, ok, 5616));
+}
+
+test revisit_provider_wait_wakes_on_provider_change_only() -> (result: TestResult) {
+    let wait: u64 = wait_code(WaitReason.Provider);
+    let ok: bool = revisit_tick(wait, event_code(RevisitEvent.ProviderChanged))
+        && revisit_tick(wait, event_code(RevisitEvent.RepoChanged)) == false
+        && revisit_tick(wait, event_code(RevisitEvent.Tick)) == false;
+    return from_assertion(equals_bool(true, ok, 5617));
+}
+
+test revisit_repo_wait_wakes_on_repo_or_claim_change() -> (result: TestResult) {
+    let wait: u64 = wait_code(WaitReason.RepoState);
+    let ok: bool = revisit_tick(wait, event_code(RevisitEvent.RepoChanged))
+        && revisit_tick(wait, event_code(RevisitEvent.ClaimChanged))
+        && revisit_tick(wait, event_code(RevisitEvent.VerdictResolved)) == false
+        && revisit_tick(wait, event_code(RevisitEvent.Tick)) == false;
+    return from_assertion(equals_bool(true, ok, 5618));
+}
+
+test revisit_declaration_change_wakes_any_wait() -> (result: TestResult) {
+    let event: u64 = event_code(RevisitEvent.DeclarationChanged);
+    let ok: bool = revisit_tick(wait_code(WaitReason.Claim), event)
+        && revisit_tick(wait_code(WaitReason.Verification), event)
+        && revisit_tick(wait_code(WaitReason.Provider), event)
+        && revisit_tick(wait_code(WaitReason.RepoState), event)
+        && revisit_tick(wait_code(WaitReason.None), event) == false;
+    return from_assertion(equals_bool(true, ok, 5619));
+}
+
+test revisit_unknown_codes_fail_closed_into_quiet() -> (result: TestResult) {
+    let ok: bool = revisit_tick(9, event_code(RevisitEvent.ClaimChanged)) == false
+        && revisit_tick(wait_code(WaitReason.Claim), 9) == false
+        && revisit_tick(wait_code(WaitReason.None), event_code(RevisitEvent.Tick)) == false;
+    return from_assertion(equals_bool(true, ok, 5620));
 }

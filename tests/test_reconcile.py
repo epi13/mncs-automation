@@ -298,6 +298,120 @@ class NativeProjectionPlanTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertEqual(completed.stdout, "")
 
+    @need_mncs
+    def test_wait_event_codes_match_native(self) -> None:
+        program = str(REPO / "native" / "mncs" / "automation"
+                      / "projection.mncs")
+        module = "mncs.automation.projection.v1"
+
+        def call(function: str, args: list) -> Any:
+            assert MNCS is not None
+            document = native.call_function(
+                mncs=MNCS, program=program, module=module,
+                function=function, args=args, libraries=LIBRARIES)
+            return document["call"]["returned"][0]["integer"]["value"]
+
+        for variant, expected in (
+                ("None", codes.WAIT_NONE),
+                ("Claim", codes.WAIT_CLAIM),
+                ("Verification", codes.WAIT_VERIFICATION),
+                ("Provider", codes.WAIT_PROVIDER),
+                ("RepoState", codes.WAIT_REPO_STATE)):
+            self.assertEqual(
+                call("wait_code", [{"finite": {"type": "WaitReason",
+                                              "variant": variant}}]),
+                expected)
+        for variant, expected in (
+                ("Tick", codes.REVISIT_EVENT_TICK),
+                ("ClaimChanged", codes.REVISIT_EVENT_CLAIM_CHANGED),
+                ("VerdictResolved", codes.REVISIT_EVENT_VERDICT_RESOLVED),
+                ("ProviderChanged", codes.REVISIT_EVENT_PROVIDER_CHANGED),
+                ("RepoChanged", codes.REVISIT_EVENT_REPO_CHANGED),
+                ("DeclarationChanged",
+                 codes.REVISIT_EVENT_DECLARATION_CHANGED)):
+            self.assertEqual(
+                call("event_code", [{"finite": {"type": "RevisitEvent",
+                                               "variant": variant}}]),
+                expected)
+
+    @need_mncs
+    def test_revisit_bridge_wakes_claim_wait_on_claim_change(self) -> None:
+        assert MNCS is not None
+        self.assertTrue(native.revisit_tick(
+            mncs=MNCS, libraries=LIBRARIES, wait=codes.WAIT_CLAIM,
+            event=codes.REVISIT_EVENT_CLAIM_CHANGED))
+        self.assertFalse(native.revisit_tick(
+            mncs=MNCS, libraries=LIBRARIES, wait=codes.WAIT_CLAIM,
+            event=codes.REVISIT_EVENT_TICK))
+
+    @need_mncs
+    def test_reconcile_cli_prints_adopt_envelope(self) -> None:
+        request = {"projection": "test:adopt", "observed_gen": 4,
+                   "regenerated_gen": 5, "canonical_gen": 5}
+        with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                         delete=False) as handle:
+            json.dump(request, handle)
+            path = handle.name
+        try:
+            assert MNCS is not None
+            completed = subprocess.run(
+                [sys.executable, str(REPO / "tools" / "reconcile.py"),
+                 "adopt", "--request", path, "--mncs", MNCS],
+                capture_output=True, text=True, timeout=180)
+        finally:
+            os.unlink(path)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        envelope = json.loads(completed.stdout)
+        self.assertEqual(envelope["schema_version"], codes.ADOPT_SCHEMA)
+        self.assertTrue(envelope["accept"])
+        self.assertEqual(envelope["new_observed"], 5)
+        self.assertEqual(envelope["reason_name"], "adopted")
+
+    @need_mncs
+    def test_reconcile_cli_refuses_stale_adopt(self) -> None:
+        request = {"projection": "test:adopt", "observed_gen": 4,
+                   "regenerated_gen": 4, "canonical_gen": 5}
+        with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                         delete=False) as handle:
+            json.dump(request, handle)
+            path = handle.name
+        try:
+            assert MNCS is not None
+            completed = subprocess.run(
+                [sys.executable, str(REPO / "tools" / "reconcile.py"),
+                 "adopt", "--request", path, "--mncs", MNCS],
+                capture_output=True, text=True, timeout=180)
+        finally:
+            os.unlink(path)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        envelope = json.loads(completed.stdout)
+        self.assertFalse(envelope["accept"])
+        self.assertEqual(envelope["new_observed"], 4)
+        self.assertEqual(envelope["reason_name"], "stale-regeneration")
+
+    @need_mncs
+    def test_reconcile_cli_prints_revisit_envelope(self) -> None:
+        request = {"projection": "test:revisit",
+                   "wait": codes.WAIT_VERIFICATION,
+                   "event": codes.REVISIT_EVENT_VERDICT_RESOLVED}
+        with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                         delete=False) as handle:
+            json.dump(request, handle)
+            path = handle.name
+        try:
+            assert MNCS is not None
+            completed = subprocess.run(
+                [sys.executable, str(REPO / "tools" / "reconcile.py"),
+                 "revisit", "--request", path, "--mncs", MNCS],
+                capture_output=True, text=True, timeout=180)
+        finally:
+            os.unlink(path)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        envelope = json.loads(completed.stdout)
+        self.assertEqual(envelope["schema_version"], codes.REVISIT_SCHEMA)
+        self.assertTrue(envelope["revisit"])
+        self.assertEqual(envelope["wait_name"], "verification")
+
 
 class DogfoodIndexTests(unittest.TestCase):
     @need_doc
