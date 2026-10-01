@@ -180,6 +180,125 @@ class NativeReconcileCodeTests(unittest.TestCase):
                 expected)
 
 
+class NativeProjectionPlanTests(unittest.TestCase):
+    @need_mncs
+    def test_gate_codes_match_native(self) -> None:
+        program = str(REPO / "native" / "mncs" / "automation"
+                      / "projection.mncs")
+        module = "mncs.automation.projection.v1"
+
+        def call(function: str, args: list) -> Any:
+            assert MNCS is not None
+            document = native.call_function(
+                mncs=MNCS, program=program, module=module,
+                function=function, args=args, libraries=LIBRARIES)
+            return document["call"]["returned"][0]["integer"]["value"]
+
+        for variant, expected in (
+                ("Proceed", codes.GATE_PROCEED),
+                ("Defer", codes.GATE_DEFER),
+                ("Escalate", codes.GATE_ESCALATE)):
+            self.assertEqual(
+                call("gate_code", [{"finite": {"type": "Gate",
+                                               "variant": variant}}]),
+                expected)
+        for variant, expected in (
+                ("Ok", codes.GATE_REASON_OK),
+                ("DeferredForeignClaim",
+                 codes.GATE_REASON_FOREIGN_CLAIM),
+                ("DeferredForeignMutation",
+                 codes.GATE_REASON_FOREIGN_MUTATION),
+                ("DeferredForeignBranch",
+                 codes.GATE_REASON_FOREIGN_BRANCH),
+                ("DeferredAmbiguous", codes.GATE_REASON_AMBIGUOUS),
+                ("DeferredRegionExplicitOnly",
+                 codes.GATE_REASON_REGION_EXPLICIT_ONLY),
+                ("EscalateAmbiguousMarkers",
+                 codes.GATE_REASON_AMBIGUOUS_MARKERS),
+                ("EscalateUnknownTarget",
+                 codes.GATE_REASON_UNKNOWN_TARGET),
+                ("EscalateHumanOnly", codes.GATE_REASON_HUMAN_ONLY),
+                ("EscalateUnknownRepo",
+                 codes.GATE_REASON_UNKNOWN_REPO),
+                ("DeferredOutputDiverged",
+                 codes.GATE_REASON_OUTPUT_DIVERGED),
+                ("EscalateDeferralExhausted",
+                 codes.GATE_REASON_DEFERRAL_EXHAUSTED)):
+            self.assertEqual(
+                call("gate_reason_code", [{"finite": {"type": "GateReason",
+                                                      "variant": variant}}]),
+                expected)
+
+    @need_mncs
+    def test_plan_bridge_defers_foreign_claim(self) -> None:
+        assert MNCS is not None
+        plan = native.plan_tick(
+            mncs=MNCS, libraries=LIBRARIES, canonical_gen=5,
+            observed_gen=4, inputs_changed=0, verdict=codes.VERDICT_PASS,
+            require_verified=1, repo=codes.REPO_CLEAN,
+            branch=codes.BRANCH_MAINLINE, claim=codes.CLAIM_FOREIGN,
+            target=codes.TARGET_WHOLE_FILE,
+            region=codes.REGION_NOT_APPLICABLE,
+            output=codes.OUTPUT_MISSING, splice_ok=0, defer_count=0,
+            defer_bound=0, unpublished=0, threshold=0,
+            oldest_unpublished_ms=0, now_ms=9_000, max_latency_ms=0)
+        self.assertEqual(plan["gate"], codes.GATE_DEFER)
+        self.assertEqual(plan["gate_reason"],
+                         codes.GATE_REASON_FOREIGN_CLAIM)
+        self.assertEqual(plan["action"], codes.RECON_REGENERATE)
+        self.assertFalse(plan["execute"])
+
+    @need_mncs
+    def test_reconcile_cli_prints_plan_envelope(self) -> None:
+        request = {"projection": "test:plan",
+                   "canonical_gen": 5, "observed_gen": 4,
+                   "inputs_changed": 0, "verdict": codes.VERDICT_PASS,
+                   "require_verified": 1, "repo": codes.REPO_CLEAN,
+                   "branch": codes.BRANCH_MAINLINE,
+                   "claim": codes.CLAIM_NONE,
+                   "target": codes.TARGET_WHOLE_FILE,
+                   "region": codes.REGION_NOT_APPLICABLE,
+                   "output": codes.OUTPUT_MISSING, "splice_ok": 0,
+                   "defer_count": 0, "defer_bound": 0, "unpublished": 0,
+                   "threshold": 0, "oldest_unpublished_ms": 0,
+                   "now_ms": 9_000, "max_latency_ms": 0}
+        with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                         delete=False) as handle:
+            json.dump(request, handle)
+            path = handle.name
+        try:
+            assert MNCS is not None
+            completed = subprocess.run(
+                [sys.executable, str(REPO / "tools" / "reconcile.py"),
+                 "plan", "--request", path, "--mncs", MNCS],
+                capture_output=True, text=True, timeout=180)
+        finally:
+            os.unlink(path)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        envelope = json.loads(completed.stdout)
+        self.assertEqual(envelope["schema_version"], codes.PLAN_SCHEMA)
+        self.assertEqual(envelope["projection"], "test:plan")
+        self.assertTrue(envelope["execute"])
+        self.assertEqual(envelope["gate_name"], "proceed")
+
+    @need_mncs
+    def test_reconcile_cli_rejects_bad_request(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json",
+                                         delete=False) as handle:
+            json.dump({"projection": "test:bad"}, handle)
+            path = handle.name
+        try:
+            assert MNCS is not None
+            completed = subprocess.run(
+                [sys.executable, str(REPO / "tools" / "reconcile.py"),
+                 "plan", "--request", path, "--mncs", MNCS],
+                capture_output=True, text=True, timeout=180)
+        finally:
+            os.unlink(path)
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+
+
 class DogfoodIndexTests(unittest.TestCase):
     @need_doc
     def test_own_rfc_index_is_current(self) -> None:

@@ -127,3 +127,48 @@ Actions 0 up-to-date · 1 regenerate · 2 await-verification ·
 1 pass · 2 unknown (mirror CondValue positions). Host codes live in
 `tools/automation/codes.py` and are cross-checked against the native
 `_code()` functions by `tests/test_reconcile.py`.
+
+## Projection plan (`mncs.reconcile-plan/1`)
+
+Native `mncs.automation.projection.v1::plan_tick` answers "may this
+projection regenerate now, and how?" It always computes the reconcile
+decision (so evidence shows staleness even while deferred) and
+reports `execute` only when the safety gate proceeds and the
+decision is regenerate. Canonical advances exactly once per observed
+input change; the caller persists advanced canonical, observed, and
+input digest atomically on adopt, so replay before adopt is
+identical. `tools/reconcile.py plan --request REQ.json` is the
+provider entrypoint (transport only); it prints this envelope:
+
+```json
+{
+  "schema_version": "mncs.reconcile-plan/1",
+  "projection": "mncs-doc:rfc-index",
+  "gate": 0, "gate_name": "proceed",
+  "gate_reason": 0, "gate_reason_name": "ok",
+  "action": 1, "action_name": "regenerate",
+  "reason": 1, "reason_name": "canonical-advanced",
+  "new_canonical": 5, "new_observed": 4,
+  "publish": false, "publish_reason": 0, "wakeup_ms": 0,
+  "execute": true
+}
+```
+
+Gates 0 proceed · 1 defer · 2 escalate. Gate reasons 0 ok ·
+1 deferred-foreign-claim · 2 deferred-foreign-mutation ·
+3 deferred-foreign-branch · 4 deferred-ambiguous ·
+5 deferred-region-explicit-only · 6 escalate-ambiguous-markers ·
+7 escalate-unknown-target · 8 escalate-human-only ·
+9 escalate-unknown-repo · 10 deferred-output-diverged ·
+11 escalate-deferral-exhausted.
+
+Fact codes (host-observed, native-interpreted): repo 0 clean ·
+1 dirty-generated-only · 2 dirty-other · 3 unknown; branch
+0 mainline · 1 foreign · 2 unknown; claim 0 none · 1 self ·
+2 foreign · 3 adopted; target 0 whole-file · 1 region-in-file ·
+2 human-only · 3 unknown; region 0 missing · 1 invalid · 2 valid ·
+3 not-applicable (shared with `mncs.doc.region`); output 0 missing ·
+1 matches-fresh · 2 matches-last-render · 3 diverged · 4 unknown.
+`splice_ok` authorizes region splicing: derived from declaration
+policy on the ambient path, granted with a live claim on the
+explicit apply path; `defer_bound` of 0 means unbounded deferral.

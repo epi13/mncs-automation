@@ -1,0 +1,339 @@
+mncs 0.17;
+
+// mncs.automation.projection.v1 — projection safety gate and plan.
+//
+// `reconcile_tick` answers "is this projection stale?". This module
+// answers "may it regenerate now, and how?" for one projection at one
+// instant, given host-observed repository, branch, claim, target, and
+// output facts. The host observes facts and persists decisions; every
+// judgment — proceed, defer, or escalate — is computed here.
+//
+// The gate never invents facts. It maps fact codes to exactly one of:
+//   0 proceed   regeneration may run now under the caller's claim.
+//   1 defer     regeneration is recorded as pending and retried later.
+//   2 escalate  regeneration refuses; a human or agent must resolve it.
+//
+// `plan_tick` always computes the reconcile decision (so evidence
+// shows staleness even while deferred) and reports `execute` only
+// when the gate proceeds and the decision is regenerate. Canonical
+// generations advance exactly once per observed input change; the
+// host persists the advanced canonical together with the observed
+// generation and input digest on adopt, so replay before adopt
+// returns the identical plan.
+//
+// Gate reasons (codes shared with the host adapter):
+//   0 ok                           1 deferred-foreign-claim
+//   2 deferred-foreign-mutation     3 deferred-foreign-branch
+//   4 deferred-ambiguous            5 deferred-region-explicit-only
+//   6 escalate-ambiguous-markers    7 escalate-unknown-target
+//   8 escalate-human-only           9 escalate-unknown-repo
+//   10 deferred-output-diverged     11 escalate-deferral-exhausted
+//
+// Fact codes (host-observed, documented in docs/MODEL.md):
+//   repo: 0 clean, 1 dirty-generated-only, 2 dirty-other, 3 unknown.
+//   branch: 0 mainline, 1 foreign, 2 unknown.
+//   claim: 0 none, 1 self, 2 foreign, 3 adopted.
+//   target: 0 whole-file, 1 region-in-file, 2 human-only, 3 unknown.
+//   region: 0 missing, 1 invalid, 2 valid, 3 not-applicable.
+//   output: 0 missing, 1 matches-fresh, 2 matches-last-render,
+//           3 diverged, 4 unknown.
+
+module mncs.automation.projection.v1;
+
+use mncs.automation.reconcile;
+use mncs.test.assertions;
+use mncs.test.suite;
+
+enum Gate { Proceed, Defer, Escalate }
+
+enum GateReason {
+    Ok,
+    DeferredForeignClaim,
+    DeferredForeignMutation,
+    DeferredForeignBranch,
+    DeferredAmbiguous,
+    DeferredRegionExplicitOnly,
+    EscalateAmbiguousMarkers,
+    EscalateUnknownTarget,
+    EscalateHumanOnly,
+    EscalateUnknownRepo,
+    DeferredOutputDiverged,
+    EscalateDeferralExhausted
+}
+
+record GateVerdict { gate: u64, reason: u64 }
+
+record ProjectionPlan {
+    gate: u64,
+    gate_reason: u64,
+    action: u64,
+    reason: u64,
+    new_canonical: u64,
+    new_observed: u64,
+    publish: bool,
+    publish_reason: u64,
+    wakeup_ms: i64,
+    execute: bool
+}
+
+fn gate_code(gate: Gate) -> (code: u64) {
+    return match gate {
+        Proceed => 0,
+        Defer => 1,
+        Escalate => 2,
+    };
+}
+
+fn gate_reason_code(reason: GateReason) -> (code: u64) {
+    return match reason {
+        Ok => 0,
+        DeferredForeignClaim => 1,
+        DeferredForeignMutation => 2,
+        DeferredForeignBranch => 3,
+        DeferredAmbiguous => 4,
+        DeferredRegionExplicitOnly => 5,
+        EscalateAmbiguousMarkers => 6,
+        EscalateUnknownTarget => 7,
+        EscalateHumanOnly => 8,
+        EscalateUnknownRepo => 9,
+        DeferredOutputDiverged => 10,
+        EscalateDeferralExhausted => 11,
+    };
+}
+
+// Whether this projection may regenerate now. Escalations are
+// checked first so ambiguity fails closed; foreign claims win over a
+// clean-looking tree; adoption-recorded claims treat dirt as known;
+// region splicing needs caller authorization (`splice_ok`), derived
+// from declaration policy on the ambient path or granted with a live
+// claim on the explicit apply path; diverged whole-file outputs defer
+// until a human or a bound reconciles them.
+fn gate_fn(
+    repo: u64,
+    branch: u64,
+    claim: u64,
+    target: u64,
+    region: u64,
+    output: u64,
+    splice_ok: u64,
+    defer_count: u64,
+    defer_bound: u64
+) -> (result: GateVerdict) {
+    if repo == 3 {
+        return GateVerdict { gate: gate_code(Gate.Escalate), reason: gate_reason_code(GateReason.EscalateUnknownRepo) };
+    }
+    if target == 2 {
+        return GateVerdict { gate: gate_code(Gate.Escalate), reason: gate_reason_code(GateReason.EscalateHumanOnly) };
+    }
+    if target == 3 {
+        return GateVerdict { gate: gate_code(Gate.Escalate), reason: gate_reason_code(GateReason.EscalateUnknownTarget) };
+    }
+    if region == 1 {
+        return GateVerdict { gate: gate_code(Gate.Escalate), reason: gate_reason_code(GateReason.EscalateAmbiguousMarkers) };
+    }
+    if branch == 2 || output == 4 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredAmbiguous) };
+    }
+    if defer_bound > 0 && defer_count > defer_bound {
+        return GateVerdict { gate: gate_code(Gate.Escalate), reason: gate_reason_code(GateReason.EscalateDeferralExhausted) };
+    }
+    if claim == 2 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredForeignClaim) };
+    }
+    if repo == 2 && claim != 3 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredForeignMutation) };
+    }
+    if branch == 1 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredForeignBranch) };
+    }
+    if target == 1 && splice_ok == 0 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredRegionExplicitOnly) };
+    }
+    if target == 0 && output == 3 {
+        return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredOutputDiverged) };
+    }
+    return GateVerdict { gate: gate_code(Gate.Proceed), reason: gate_reason_code(GateReason.Ok) };
+}
+
+// One projection plan step. `inputs_changed` is 1 when the current
+// input digest differs from the last adopted digest. See the module
+// header for the canonical-advance discipline.
+fn plan_tick(
+    canonical_gen: u64,
+    observed_gen: u64,
+    inputs_changed: u64,
+    verdict: u64,
+    require_verified: u64,
+    repo: u64,
+    branch: u64,
+    claim: u64,
+    target: u64,
+    region: u64,
+    output: u64,
+    splice_ok: u64,
+    defer_count: u64,
+    defer_bound: u64,
+    unpublished: u64,
+    threshold: u64,
+    oldest_unpublished_ms: i64,
+    now_ms: i64,
+    max_latency_ms: i64
+) -> (result: ProjectionPlan) {
+    let effective: u64 = canonical_gen +% select(inputs_changed != 0, 1, 0);
+    let gate: GateVerdict = gate_fn(repo, branch, claim, target, region, output, splice_ok, defer_count, defer_bound);
+    let decision: ReconcileDecision = reconcile_tick(
+        effective, observed_gen, verdict, require_verified,
+        unpublished, threshold, oldest_unpublished_ms, now_ms, max_latency_ms);
+    let proceed: bool = gate.gate == gate_code(Gate.Proceed);
+    let regenerate: bool = decision.action == action_code(ReconAction.Regenerate);
+    return ProjectionPlan {
+        gate: gate.gate,
+        gate_reason: gate.reason,
+        action: decision.action,
+        reason: decision.reason,
+        new_canonical: effective,
+        new_observed: decision.new_observed,
+        publish: decision.publish && proceed,
+        publish_reason: select(proceed, decision.publish_reason, publish_reason_code(PublishReason.None)),
+        wakeup_ms: decision.wakeup_ms,
+        execute: proceed && regenerate
+    };
+}
+
+fn plans_equal(left: ProjectionPlan, right: ProjectionPlan) -> (equal: bool) {
+    return left.gate == right.gate
+        && left.gate_reason == right.gate_reason
+        && left.action == right.action
+        && left.reason == right.reason
+        && left.new_canonical == right.new_canonical
+        && left.new_observed == right.new_observed
+        && left.publish == right.publish
+        && left.publish_reason == right.publish_reason
+        && left.wakeup_ms == right.wakeup_ms
+        && left.execute == right.execute;
+}
+
+fn stale_safe_plan() -> (result: ProjectionPlan) {
+    return plan_tick(5, 4, 0, verdict_pass(), 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 9000, 0);
+}
+
+test gate_proceeds_for_clean_whole_file() -> (result: TestResult) {
+    let verdict: GateVerdict = gate_fn(0, 0, 0, 0, 3, 0, 0, 0, 0);
+    let ok: bool = verdict.gate == gate_code(Gate.Proceed)
+        && verdict.reason == gate_reason_code(GateReason.Ok);
+    return from_assertion(equals_bool(true, ok, 5601));
+}
+
+test gate_defers_foreign_claim_on_clean_tree() -> (result: TestResult) {
+    let verdict: GateVerdict = gate_fn(0, 0, 2, 0, 3, 0, 0, 0, 0);
+    let ok: bool = verdict.gate == gate_code(Gate.Defer)
+        && verdict.reason == gate_reason_code(GateReason.DeferredForeignClaim);
+    return from_assertion(equals_bool(true, ok, 5602));
+}
+
+test gate_defers_dirty_other_work() -> (result: TestResult) {
+    let verdict: GateVerdict = gate_fn(2, 0, 0, 0, 3, 0, 0, 0, 0);
+    let ok: bool = verdict.gate == gate_code(Gate.Defer)
+        && verdict.reason == gate_reason_code(GateReason.DeferredForeignMutation);
+    return from_assertion(equals_bool(true, ok, 5603));
+}
+
+test gate_defers_foreign_branch() -> (result: TestResult) {
+    let verdict: GateVerdict = gate_fn(0, 1, 0, 0, 3, 0, 0, 0, 0);
+    let ok: bool = verdict.gate == gate_code(Gate.Defer)
+        && verdict.reason == gate_reason_code(GateReason.DeferredForeignBranch);
+    return from_assertion(equals_bool(true, ok, 5604));
+}
+
+test gate_defers_region_target_until_explicit() -> (result: TestResult) {
+    let ambient: GateVerdict = gate_fn(0, 0, 1, 1, 2, 1, 0, 0, 0);
+    let allowed: GateVerdict = gate_fn(0, 0, 1, 1, 2, 1, 1, 0, 0);
+    let ok: bool = ambient.gate == gate_code(Gate.Defer)
+        && ambient.reason == gate_reason_code(GateReason.DeferredRegionExplicitOnly)
+        && allowed.gate == gate_code(Gate.Proceed);
+    return from_assertion(equals_bool(true, ok, 5605));
+}
+
+test gate_escalates_invalid_region() -> (result: TestResult) {
+    let verdict: GateVerdict = gate_fn(0, 0, 1, 1, 1, 4, 1, 0, 0);
+    let ok: bool = verdict.gate == gate_code(Gate.Escalate)
+        && verdict.reason == gate_reason_code(GateReason.EscalateAmbiguousMarkers);
+    return from_assertion(equals_bool(true, ok, 5606));
+}
+
+test gate_escalates_human_only_and_unknown() -> (result: TestResult) {
+    let human: GateVerdict = gate_fn(0, 0, 0, 2, 3, 4, 0, 0, 0);
+    let target: GateVerdict = gate_fn(0, 0, 0, 3, 3, 4, 0, 0, 0);
+    let repo: GateVerdict = gate_fn(3, 0, 0, 0, 3, 0, 0, 0, 0);
+    let ok: bool = human.gate == gate_code(Gate.Escalate)
+        && human.reason == gate_reason_code(GateReason.EscalateHumanOnly)
+        && target.gate == gate_code(Gate.Escalate)
+        && target.reason == gate_reason_code(GateReason.EscalateUnknownTarget)
+        && repo.gate == gate_code(Gate.Escalate)
+        && repo.reason == gate_reason_code(GateReason.EscalateUnknownRepo);
+    return from_assertion(equals_bool(true, ok, 5607));
+}
+
+test gate_defers_diverged_output_then_exhausts() -> (result: TestResult) {
+    let held: GateVerdict = gate_fn(0, 0, 0, 0, 3, 3, 0, 2, 3);
+    let spent: GateVerdict = gate_fn(0, 0, 0, 0, 3, 3, 0, 4, 3);
+    let ok: bool = held.gate == gate_code(Gate.Defer)
+        && held.reason == gate_reason_code(GateReason.DeferredOutputDiverged)
+        && spent.gate == gate_code(Gate.Escalate)
+        && spent.reason == gate_reason_code(GateReason.EscalateDeferralExhausted);
+    return from_assertion(equals_bool(true, ok, 5608));
+}
+
+test gate_allows_adopted_and_generated_only_dirt() -> (result: TestResult) {
+    let adopted: GateVerdict = gate_fn(2, 0, 3, 0, 3, 2, 0, 0, 0);
+    let genonly: GateVerdict = gate_fn(1, 0, 0, 0, 3, 2, 0, 0, 0);
+    let ok: bool = adopted.gate == gate_code(Gate.Proceed)
+        && genonly.gate == gate_code(Gate.Proceed);
+    return from_assertion(equals_bool(true, ok, 5609));
+}
+
+test plan_stale_safe_regenerates_and_executes() -> (result: TestResult) {
+    let plan: ProjectionPlan = stale_safe_plan();
+    let ok: bool = plan.action == action_code(ReconAction.Regenerate)
+        && plan.gate == gate_code(Gate.Proceed)
+        && plan.execute
+        && plan.new_canonical == 5
+        && plan.new_observed == 4;
+    return from_assertion(equals_bool(true, ok, 5610));
+}
+
+test plan_stale_occupied_defers_without_execute() -> (result: TestResult) {
+    let plan: ProjectionPlan = plan_tick(5, 4, 0, verdict_pass(), 1, 2, 0, 0, 0, 3, 0, 0, 0, 0, 3, 3, 1000, 2000, 60000);
+    let ok: bool = plan.action == action_code(ReconAction.Regenerate)
+        && plan.reason == reason_code(ReconReason.CanonicalAdvanced)
+        && plan.gate == gate_code(Gate.Defer)
+        && plan.execute == false
+        && plan.publish == false;
+    return from_assertion(equals_bool(true, ok, 5611));
+}
+
+test plan_advances_canonical_once_on_input_change() -> (result: TestResult) {
+    let first: ProjectionPlan = plan_tick(5, 5, 1, verdict_pass(), 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 9000, 0);
+    let replay: ProjectionPlan = plan_tick(5, 5, 1, verdict_pass(), 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 9000, 0);
+    let ok: bool = first.new_canonical == 6
+        && first.action == action_code(ReconAction.Regenerate)
+        && plans_equal(first, replay);
+    return from_assertion(equals_bool(true, ok, 5612));
+}
+
+test plan_current_world_stays_quiet() -> (result: TestResult) {
+    let plan: ProjectionPlan = plan_tick(5, 5, 0, verdict_pass(), 1, 0, 0, 0, 0, 3, 1, 0, 0, 0, 0, 0, 0, 9000, 0);
+    let ok: bool = plan.action == action_code(ReconAction.UpToDate)
+        && plan.gate == gate_code(Gate.Proceed)
+        && plan.execute == false
+        && plan.publish == false
+        && plan.new_canonical == 5;
+    return from_assertion(equals_bool(true, ok, 5613));
+}
+
+test plan_withholds_failed_verification() -> (result: TestResult) {
+    let plan: ProjectionPlan = plan_tick(6, 5, 0, verdict_fail(), 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 9000, 0);
+    let ok: bool = plan.action == action_code(ReconAction.FailedVerification)
+        && plan.execute == false;
+    return from_assertion(equals_bool(true, ok, 5614));
+}

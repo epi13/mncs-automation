@@ -130,3 +130,75 @@ VERDICT_NAMES = {
     1: "pass",
     2: "unknown",
 }
+
+# Projection gate (native/mncs/automation/projection.mncs). Fact codes
+# are host-observed; the gate verdict is native policy.
+PLAN_SCHEMA = "mncs.reconcile-plan/1"
+
+GATE_PROCEED = 0
+GATE_DEFER = 1
+GATE_ESCALATE = 2
+
+GATE_REASON_OK = 0
+GATE_REASON_FOREIGN_CLAIM = 1
+GATE_REASON_FOREIGN_MUTATION = 2
+GATE_REASON_FOREIGN_BRANCH = 3
+GATE_REASON_AMBIGUOUS = 4
+GATE_REASON_REGION_EXPLICIT_ONLY = 5
+GATE_REASON_AMBIGUOUS_MARKERS = 6
+GATE_REASON_UNKNOWN_TARGET = 7
+GATE_REASON_HUMAN_ONLY = 8
+GATE_REASON_UNKNOWN_REPO = 9
+GATE_REASON_OUTPUT_DIVERGED = 10
+GATE_REASON_DEFERRAL_EXHAUSTED = 11
+
+GATE_NAMES = {
+    0: "proceed",
+    1: "defer",
+    2: "escalate",
+}
+
+GATE_REASON_NAMES = {
+    0: "ok",
+    1: "deferred-foreign-claim",
+    2: "deferred-foreign-mutation",
+    3: "deferred-foreign-branch",
+    4: "deferred-ambiguous",
+    5: "deferred-region-explicit-only",
+    6: "escalate-ambiguous-markers",
+    7: "escalate-unknown-target",
+    8: "escalate-human-only",
+    9: "escalate-unknown-repo",
+    10: "deferred-output-diverged",
+    11: "escalate-deferral-exhausted",
+}
+
+REPO_CLEAN = 0
+REPO_DIRTY_GENERATED_ONLY = 1
+REPO_DIRTY_OTHER = 2
+REPO_UNKNOWN = 3
+
+BRANCH_MAINLINE = 0
+BRANCH_FOREIGN = 1
+BRANCH_UNKNOWN = 2
+
+CLAIM_NONE = 0
+CLAIM_SELF = 1
+CLAIM_FOREIGN = 2
+CLAIM_ADOPTED = 3
+
+TARGET_WHOLE_FILE = 0
+TARGET_REGION_IN_FILE = 1
+TARGET_HUMAN_ONLY = 2
+TARGET_UNKNOWN = 3
+
+REGION_MISSING = 0
+REGION_INVALID = 1
+REGION_VALID = 2
+REGION_NOT_APPLICABLE = 3
+
+OUTPUT_MISSING = 0
+OUTPUT_MATCHES_FRESH = 1
+OUTPUT_MATCHES_LAST_RENDER = 2
+OUTPUT_DIVERGED = 3
+OUTPUT_UNKNOWN = 4

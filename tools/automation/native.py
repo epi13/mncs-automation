@@ -228,6 +228,40 @@ def reconcile_tick(*, mncs: str, libraries: list[str] | None = None,
     return decision
 
 
+PROJECTION_PROGRAM = str(NATIVE_DIR / "mncs" / "automation" / "projection.mncs")
+PROJECTION_MODULE = "mncs.automation.projection.v1"
+
+
+def plan_tick(*, mncs: str, libraries: list[str] | None = None,
+              timeout_s: int = 60, **fields: Any) -> dict[str, Any]:
+    """Call native `plan_tick`; return the decoded ProjectionPlan."""
+    order = ("canonical_gen", "observed_gen", "inputs_changed", "verdict",
+             "require_verified", "repo", "branch", "claim", "target",
+             "region", "output", "splice_ok", "defer_count", "defer_bound",
+             "unpublished", "threshold", "oldest_unpublished_ms", "now_ms",
+             "max_latency_ms")
+    args = [{"integer": {"value": int(fields[name])}} for name in order]
+    document = call_function(
+        mncs=mncs,
+        program=PROJECTION_PROGRAM,
+        module=PROJECTION_MODULE,
+        function="plan_tick",
+        args=args,
+        libraries=default_libraries((libraries or []) + [str(NATIVE_DIR)]),
+        timeout_s=timeout_s,
+    )
+    if document.get("status") != "returned":
+        raise NativeError(f"native plan failed: "
+                          f"{document.get('error', document)}")
+    plan = decode_record(document["call"]["returned"])
+    for key in ("gate", "gate_reason", "action", "reason", "new_canonical",
+                "new_observed", "publish", "publish_reason", "wakeup_ms",
+                "execute"):
+        if key not in plan:
+            raise NativeError(f"native plan missing {key}")
+    return plan
+
+
 def adopt_observed(*, mncs: str, libraries: list[str] | None = None,
                    timeout_s: int = 60, observed_gen: int,
                    regenerated_gen: int,

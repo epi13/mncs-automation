@@ -20,7 +20,7 @@
       {"contract": "automation-definition", "version": "1", "kind": "persistent-automation-definition", "stability": "experimental", "fingerprint_sources": ["tools/automation/model.py", "tests/test_automation.py"]},
       {"contract": "automation-evaluation", "version": "1", "kind": "native-tick-decision", "stability": "experimental", "fingerprint_sources": ["native/", "tools/automation/native.py", "tests/test_automation.py"]},
       {"contract": "automation-occurrence", "version": "1", "kind": "occurrence-and-invocation-record", "stability": "experimental", "fingerprint_sources": ["tools/automation/engine.py", "tests/test_automation.py"]},
-      {"contract": "automation-reconciliation", "version": "1", "kind": "native-reconcile-decision", "stability": "experimental", "fingerprint_sources": ["native/mncs/automation/reconcile.mncs", "tools/automation/native.py", "tools/automation/codes.py", "tests/test_reconcile.py", "docs/rfcs/0002-projection-coherence.md"]}
+      {"contract": "automation-reconciliation", "version": "1", "kind": "native-reconcile-decision", "stability": "experimental", "effects": ["read"], "fingerprint_sources": ["native/mncs/automation/reconcile.mncs", "native/mncs/automation/projection.mncs", "tools/reconcile.py", "tools/automation/native.py", "tools/automation/codes.py", "tests/test_reconcile.py", "docs/rfcs/0002-projection-coherence.md"], "invocation": {"kind": "python", "path": "tools/reconcile.py", "fixed_argv": ["plan"], "toolchain": {"repository": "mncs-language", "path": "target/release/mncs"}, "toolchain_env": "MNCS_BIN"}}
     ],
     "consumes": [
       {"contract": "mncs.compiler.call/1", "envelope": {"op": "any"}, "required": true},
@@ -32,5 +32,8 @@
       {"test": "automation-tests", "covers": ["automation-definition", "automation-evaluation", "automation-occurrence"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_automation"]}},
       {"test": "reconcile-tests", "covers": ["automation-reconciliation"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_reconcile"]}}
     ]
-  }
+  },
+  "projections": [
+    {"id": "mncs-automation:rfc-index", "template": "project-rfc-index", "inputs": ["docs/rfcs"], "output": "docs/rfc-index.generated.md", "output_kind": "whole-file", "provider_capability": "mncs-doc:documentation-projection", "render_argv": ["project-rfc-index", "--rfc-root", "{checkout}/docs/rfcs", "--output", "{artifact}/rendered.md"], "policy": "ambient-safe"}
+  ]
 }
