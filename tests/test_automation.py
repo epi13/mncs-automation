@@ -852,7 +852,8 @@ class EnvironmentReconcileTargetTests(EngineCase):
 class NativeSuiteTests(unittest.TestCase):
     @need_mncs
     def test_native_suites_pass(self) -> None:
-        for module in ("time", "schedule", "trigger", "evaluation"):
+        for module in ("time", "schedule", "trigger", "evaluation",
+                       "reconcile"):
             with self.subTest(module=module):
                 result = native.run_test_suite(
                     mncs=MNCS,
