@@ -172,3 +172,46 @@ Fact codes (host-observed, native-interpreted): repo 0 clean ·
 `splice_ok` authorizes region splicing: derived from declaration
 policy on the ambient path, granted with a live claim on the
 explicit apply path; `defer_bound` of 0 means unbounded deferral.
+
+## Adoption (`mncs.adopt-decision/1`)
+
+`tools/reconcile.py adopt --request REQ.json` calls native
+`mncs.automation.reconcile.v1::adopt_observed` and prints:
+
+```json
+{
+  "schema_version": "mncs.adopt-decision/1",
+  "projection": "mncs-doc:rfc-index",
+  "accept": true, "new_observed": 5,
+  "reason": 0, "reason_name": "adopted"
+}
+```
+
+Request: `observed_gen`, `regenerated_gen`, `canonical_gen` (integers).
+Accepts only when the regeneration was built from exactly the current
+canonical generation without moving observed backwards. Reasons 0
+adopted · 1 stale-regeneration · 2 regression-refused. Hosts must
+adopt through this decision; writing observed generations directly
+bypasses the stale/regression guard.
+
+## Revisit (`mncs.revisit-decision/1`)
+
+`tools/reconcile.py revisit --request REQ.json` calls native
+`mncs.automation.projection.v1::revisit_tick` and prints:
+
+```json
+{
+  "schema_version": "mncs.revisit-decision/1",
+  "projection": "mncs-doc:rfc-index",
+  "wait": 1, "wait_name": "claim",
+  "event": 1, "event_name": "claim-changed",
+  "revisit": true
+}
+```
+
+Request: `wait`, `event` (integers). Waits 0 none · 1 claim ·
+2 verification · 3 provider · 4 repo-state. Events 0 tick ·
+1 claim-changed · 2 verdict-resolved · 3 provider-changed ·
+4 repo-changed · 5 declaration-changed. Each wait wakes only on the
+events that can resolve it; a bare tick never revisits and unknown
+codes fail closed into quiet, so continuous operation never polls.
