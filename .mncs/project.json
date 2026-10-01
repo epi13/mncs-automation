@@ -36,6 +36,6 @@
     ]
   },
   "projections": [
-    {"id": "mncs-automation:rfc-index", "template": "project-rfc-index", "inputs": ["docs/rfcs"], "output": "docs/rfc-index.generated.md", "output_kind": "whole-file", "provider_capability": "mncs-doc:documentation-projection", "render_argv": ["project-rfc-index", "--rfc-root", "{checkout}/docs/rfcs", "--output", "{artifact}/rendered.md", "--link-base", "{checkout}/docs/rfc-index.generated.md"], "policy": "ambient-safe"}
+    {"id": "mncs-automation:rfc-index", "template": "project-rfc-index", "inputs": ["docs/rfcs"], "output": "docs/rfc-index.generated.md", "output_kind": "whole-file", "provider_capability": "mncs-doc:documentation-projection", "render_argv": ["project-rfc-index", "--rfc-root", "{checkout}/docs/rfcs", "--output", "{artifact}/rendered.md", "--link-base", "{checkout}/docs/rfc-index.generated.md"], "policy": "ambient-safe", "verification": {"obligations": ["mncs-doc:verification-executor/mncs-doc.projection-check"]}}
   ]
 }
