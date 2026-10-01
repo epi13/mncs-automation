@@ -1,0 +1,408 @@
+mncs 0.17;
+
+// mncs.automation.reconcile.v1 — projection reconciliation decisions.
+//
+// A projection (README section, Atlas page, journal entry, media artifact,
+// publication) is a pure function of a canonical generation plus
+// verification evidence. `reconcile_tick` decides, for one projection at
+// one instant, whether the observed output is current, stale and
+// regenerable, blocked on verification, or ahead of canonical.
+//
+// The host observes canonical generations, verification verdicts, and
+// persisted observed generations; it never invents a decision. Ticks are
+// idempotent: re-evaluating the same state returns the same decision, so
+// replay and crash recovery are defined behavior. The native side never
+// advances `observed`: the host advances it only after a regeneration it
+// performed, through `adopt_observed`, which refuses stale or
+// regressing generations. A stale generation can therefore never
+// overwrite newer output, and running the same reconciler twice never
+// duplicates work.
+//
+// Verification verdict codes mirror mncs.automation.trigger CondValue
+// positions (False/True/Unknown): fail is 0, pass is 1, unknown is 2.
+// UNKNOWN never authorizes an authoritative claim, and FAIL withholds
+// one even under draft policy.
+//
+// Publication is orthogonal to projection currency: a current
+// projection may still await publication. The `publish` flag fires when
+// verified-but-unpublished work reaches a meaningful threshold, or when
+// the oldest unpublished work exceeds a maximum latency. Publication
+// always requires a passing verdict for the generation in question.
+//
+// Decision actions (codes shared with the host adapter):
+//   0 up-to-date            observed equals canonical; nothing to do.
+//   1 regenerate            canonical advanced and verification passes.
+//   2 await-verification    canonical advanced but the verdict is unknown.
+//   3 blocked               observed is ahead of canonical; hold, never regress.
+//   4 failed-verification   canonical advanced but the verdict failed; withhold.
+// Reasons:
+//   0 current               1 canonical-advanced      2 verification-unknown
+//   3 verification-failed   4 observed-ahead
+// Publish reasons:
+//   0 none                  1 threshold-reached       2 latency-exceeded
+// Adopt reasons:
+//   0 adopted               1 stale-regeneration      2 regression-refused
+
+module mncs.automation.reconcile.v1;
+
+use mncs.test.assertions;
+use mncs.test.suite;
+
+enum ReconAction { UpToDate, Regenerate, AwaitVerification, Blocked, FailedVerification }
+
+enum ReconReason { Current, CanonicalAdvanced, VerificationUnknown, VerificationFailed, ObservedAhead }
+
+enum PublishReason { None, ThresholdReached, LatencyExceeded }
+
+enum AdoptReason { Adopted, StaleRegeneration, RegressionRefused }
+
+record ReconcileDecision {
+    action: u64,
+    reason: u64,
+    new_observed: u64,
+    publish: bool,
+    publish_reason: u64,
+    wakeup_ms: i64
+}
+
+record AdoptDecision { accept: bool, new_observed: u64, reason: u64 }
+
+fn action_code(action: ReconAction) -> (code: u64) {
+    return match action {
+        UpToDate => 0,
+        Regenerate => 1,
+        AwaitVerification => 2,
+        Blocked => 3,
+        FailedVerification => 4,
+    };
+}
+
+fn reason_code(reason: ReconReason) -> (code: u64) {
+    return match reason {
+        Current => 0,
+        CanonicalAdvanced => 1,
+        VerificationUnknown => 2,
+        VerificationFailed => 3,
+        ObservedAhead => 4,
+    };
+}
+
+fn publish_reason_code(reason: PublishReason) -> (code: u64) {
+    return match reason {
+        None => 0,
+        ThresholdReached => 1,
+        LatencyExceeded => 2,
+    };
+}
+
+fn adopt_reason_code(reason: AdoptReason) -> (code: u64) {
+    return match reason {
+        Adopted => 0,
+        StaleRegeneration => 1,
+        RegressionRefused => 2,
+    };
+}
+
+// Verification verdict codes: 0 fail, 1 pass, 2 unknown.
+fn verdict_fail() -> (code: u64) {
+    return 0;
+}
+
+fn verdict_pass() -> (code: u64) {
+    return 1;
+}
+
+fn verdict_unknown() -> (code: u64) {
+    return 2;
+}
+
+// One reconciliation step. `canonical_gen` is the authoritative
+// generation the projection should reflect; `observed_gen` is the
+// generation the persisted output was built from. `require_verified`
+// is 1 when only a passing verdict authorizes regeneration (the
+// authoritative default) and 0 when drafts may regenerate on unknown
+// verdicts. Publication inputs describe verified-but-unpublished work:
+// `threshold` of 0 disables count-based publication and
+// `max_latency_ms` of 0 disables latency-based publication.
+fn reconcile_tick(
+    canonical_gen: u64,
+    observed_gen: u64,
+    verdict: u64,
+    require_verified: u64,
+    unpublished: u64,
+    threshold: u64,
+    oldest_unpublished_ms: i64,
+    now_ms: i64,
+    max_latency_ms: i64
+) -> (result: ReconcileDecision) {
+    let publish: bool = should_publish(verdict, unpublished, threshold, oldest_unpublished_ms, now_ms, max_latency_ms);
+    let publish_reason: u64 = publish_reason_for(verdict, unpublished, threshold, oldest_unpublished_ms, now_ms, max_latency_ms);
+    let wakeup: i64 = publish_wakeup(verdict, publish, unpublished, oldest_unpublished_ms, max_latency_ms);
+    if observed_gen > canonical_gen {
+        return ReconcileDecision {
+            action: action_code(ReconAction.Blocked),
+            reason: reason_code(ReconReason.ObservedAhead),
+            new_observed: observed_gen,
+            publish: false,
+            publish_reason: publish_reason_code(PublishReason.None),
+            wakeup_ms: 0
+        };
+    }
+    if observed_gen == canonical_gen {
+        return ReconcileDecision {
+            action: action_code(ReconAction.UpToDate),
+            reason: reason_code(ReconReason.Current),
+            new_observed: observed_gen,
+            publish: publish,
+            publish_reason: publish_reason,
+            wakeup_ms: wakeup
+        };
+    }
+    if verdict == verdict_fail() {
+        return ReconcileDecision {
+            action: action_code(ReconAction.FailedVerification),
+            reason: reason_code(ReconReason.VerificationFailed),
+            new_observed: observed_gen,
+            publish: false,
+            publish_reason: publish_reason_code(PublishReason.None),
+            wakeup_ms: 0
+        };
+    }
+    if verdict == verdict_unknown() && require_verified == 1 {
+        return ReconcileDecision {
+            action: action_code(ReconAction.AwaitVerification),
+            reason: reason_code(ReconReason.VerificationUnknown),
+            new_observed: observed_gen,
+            publish: false,
+            publish_reason: publish_reason_code(PublishReason.None),
+            wakeup_ms: 0
+        };
+    }
+    return ReconcileDecision {
+        action: action_code(ReconAction.Regenerate),
+        reason: reason_code(ReconReason.CanonicalAdvanced),
+        new_observed: observed_gen,
+        publish: publish,
+        publish_reason: publish_reason,
+        wakeup_ms: wakeup
+    };
+}
+
+// Publication fires only on a passing verdict, when unpublished work
+// reaches the count threshold or exceeds the latency cap.
+fn should_publish(
+    verdict: u64,
+    unpublished: u64,
+    threshold: u64,
+    oldest_unpublished_ms: i64,
+    now_ms: i64,
+    max_latency_ms: i64
+) -> (publish: bool) {
+    if verdict != verdict_pass() {
+        return false;
+    }
+    if unpublished == 0 {
+        return false;
+    }
+    if threshold > 0 && unpublished >= threshold {
+        return true;
+    }
+    if max_latency_ms > 0 && oldest_unpublished_ms > 0 && now_ms -% oldest_unpublished_ms >= max_latency_ms {
+        return true;
+    }
+    return false;
+}
+
+fn publish_reason_for(
+    verdict: u64,
+    unpublished: u64,
+    threshold: u64,
+    oldest_unpublished_ms: i64,
+    now_ms: i64,
+    max_latency_ms: i64
+) -> (reason: u64) {
+    if verdict != verdict_pass() || unpublished == 0 {
+        return publish_reason_code(PublishReason.None);
+    }
+    if threshold > 0 && unpublished >= threshold {
+        return publish_reason_code(PublishReason.ThresholdReached);
+    }
+    if max_latency_ms > 0 && oldest_unpublished_ms > 0 && now_ms -% oldest_unpublished_ms >= max_latency_ms {
+        return publish_reason_code(PublishReason.LatencyExceeded);
+    }
+    return publish_reason_code(PublishReason.None);
+}
+
+// When unpublished work is held under a latency cap, name the revisit;
+// otherwise no future instant is implied.
+fn publish_wakeup(
+    verdict: u64,
+    publish: bool,
+    unpublished: u64,
+    oldest_unpublished_ms: i64,
+    max_latency_ms: i64
+) -> (wakeup_ms: i64) {
+    if verdict != verdict_pass() || publish || unpublished == 0 {
+        return 0;
+    }
+    if max_latency_ms > 0 && oldest_unpublished_ms > 0 {
+        return oldest_unpublished_ms +% max_latency_ms;
+    }
+    return 0;
+}
+
+// Adopt a regeneration result. The host calls this after it regenerates
+// a projection from `regenerated_gen`. Adoption succeeds only when the
+// regeneration was built from exactly the current canonical generation
+// and does not move observed backwards. Anything else is refused and
+// observed stays where it was: replaying an old regeneration after a
+// crash can never overwrite newer output.
+fn adopt_observed(observed_gen: u64, regenerated_gen: u64, canonical_gen: u64) -> (result: AdoptDecision) {
+    if regenerated_gen < observed_gen {
+        return AdoptDecision {
+            accept: false,
+            new_observed: observed_gen,
+            reason: adopt_reason_code(AdoptReason.RegressionRefused)
+        };
+    }
+    if regenerated_gen != canonical_gen {
+        return AdoptDecision {
+            accept: false,
+            new_observed: observed_gen,
+            reason: adopt_reason_code(AdoptReason.StaleRegeneration)
+        };
+    }
+    return AdoptDecision {
+        accept: true,
+        new_observed: regenerated_gen,
+        reason: adopt_reason_code(AdoptReason.Adopted)
+    };
+}
+
+fn decisions_equal(left: ReconcileDecision, right: ReconcileDecision) -> (equal: bool) {
+    return left.action == right.action
+        && left.reason == right.reason
+        && left.new_observed == right.new_observed
+        && left.publish == right.publish
+        && left.publish_reason == right.publish_reason
+        && left.wakeup_ms == right.wakeup_ms;
+}
+
+fn tick_current() -> (result: ReconcileDecision) {
+    return reconcile_tick(5, 5, verdict_pass(), 1, 0, 3, 0, 9000, 10000);
+}
+
+test same_generation_tick_is_idempotent() -> (result: TestResult) {
+    let first: ReconcileDecision = tick_current();
+    let second: ReconcileDecision = tick_current();
+    return from_assertion(equals_bool(true, decisions_equal(first, second), 5401));
+}
+
+test current_projection_is_up_to_date() -> (result: TestResult) {
+    let tick: ReconcileDecision = tick_current();
+    let ok: bool = tick.action == action_code(ReconAction.UpToDate)
+        && tick.reason == reason_code(ReconReason.Current)
+        && tick.new_observed == 5
+        && tick.publish == false;
+    return from_assertion(equals_bool(true, ok, 5402));
+}
+
+test canonical_advance_marks_stale() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 4, verdict_pass(), 1, 0, 3, 0, 9000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.Regenerate)
+        && tick.reason == reason_code(ReconReason.CanonicalAdvanced)
+        && tick.new_observed == 4;
+    return from_assertion(equals_bool(true, ok, 5403));
+}
+
+test failed_verification_withholds_claim() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 4, verdict_fail(), 1, 9, 3, 1000, 9000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.FailedVerification)
+        && tick.reason == reason_code(ReconReason.VerificationFailed)
+        && tick.new_observed == 4
+        && tick.publish == false;
+    return from_assertion(equals_bool(true, ok, 5404));
+}
+
+test unknown_verification_waits() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 4, verdict_unknown(), 1, 0, 3, 0, 9000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.AwaitVerification)
+        && tick.reason == reason_code(ReconReason.VerificationUnknown)
+        && tick.new_observed == 4;
+    return from_assertion(equals_bool(true, ok, 5405));
+}
+
+test draft_policy_regenerates_when_unknown() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 4, verdict_unknown(), 0, 0, 3, 0, 9000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.Regenerate)
+        && tick.reason == reason_code(ReconReason.CanonicalAdvanced);
+    return from_assertion(equals_bool(true, ok, 5406));
+}
+
+test observed_ahead_holds_without_publish() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 6, verdict_pass(), 1, 9, 3, 1000, 9000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.Blocked)
+        && tick.reason == reason_code(ReconReason.ObservedAhead)
+        && tick.new_observed == 6
+        && tick.publish == false;
+    return from_assertion(equals_bool(true, ok, 5407));
+}
+
+test threshold_reaches_publish() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 5, verdict_pass(), 1, 3, 3, 1000, 2000, 60000);
+    let ok: bool = tick.action == action_code(ReconAction.UpToDate)
+        && tick.publish
+        && tick.publish_reason == publish_reason_code(PublishReason.ThresholdReached);
+    return from_assertion(equals_bool(true, ok, 5408));
+}
+
+test latency_exceeds_publish() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 5, verdict_pass(), 1, 1, 5, 1000, 12000, 10000);
+    let ok: bool = tick.action == action_code(ReconAction.UpToDate)
+        && tick.publish
+        && tick.publish_reason == publish_reason_code(PublishReason.LatencyExceeded);
+    return from_assertion(equals_bool(true, ok, 5409));
+}
+
+test below_threshold_holds_with_wakeup() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 5, verdict_pass(), 1, 1, 5, 1000, 2000, 10000);
+    let ok: bool = tick.publish == false
+        && tick.publish_reason == publish_reason_code(PublishReason.None)
+        && tick.wakeup_ms == 11000;
+    return from_assertion(equals_bool(true, ok, 5410));
+}
+
+test publish_requires_verified() -> (result: TestResult) {
+    let tick: ReconcileDecision = reconcile_tick(5, 5, verdict_fail(), 1, 9, 3, 1000, 2000, 60000);
+    return from_assertion(equals_bool(false, tick.publish, 5411));
+}
+
+test adopt_accepts_current_regeneration() -> (result: TestResult) {
+    let adopted: AdoptDecision = adopt_observed(4, 5, 5);
+    let ok: bool = adopted.accept
+        && adopted.new_observed == 5
+        && adopted.reason == adopt_reason_code(AdoptReason.Adopted);
+    return from_assertion(equals_bool(true, ok, 5412));
+}
+
+test adopt_refuses_stale_regeneration() -> (result: TestResult) {
+    let adopted: AdoptDecision = adopt_observed(4, 4, 5);
+    let ok: bool = adopted.accept == false
+        && adopted.new_observed == 4
+        && adopted.reason == adopt_reason_code(AdoptReason.StaleRegeneration);
+    return from_assertion(equals_bool(true, ok, 5413));
+}
+
+test adopt_refuses_regression() -> (result: TestResult) {
+    let adopted: AdoptDecision = adopt_observed(5, 4, 5);
+    let ok: bool = adopted.accept == false
+        && adopted.new_observed == 5
+        && adopted.reason == adopt_reason_code(AdoptReason.RegressionRefused);
+    return from_assertion(equals_bool(true, ok, 5414));
+}
+
+test replay_after_adopt_is_current() -> (result: TestResult) {
+    let adopted: AdoptDecision = adopt_observed(4, 5, 5);
+    let tick: ReconcileDecision = reconcile_tick(5, adopted.new_observed, verdict_pass(), 1, 0, 3, 0, 9000, 10000);
+    return from_assertion(equals_bool(true, tick.action == action_code(ReconAction.UpToDate), 5415));
+}

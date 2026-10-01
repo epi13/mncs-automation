@@ -96,3 +96,34 @@ blocks). Exit 0 normally, 1 on pass errors, 2 on invalid input.
 `definitions/<aid>.json · state/<aid>.json ·
 occurrences/<aid>.jsonl · artifacts/<aid>/<inv>.* · policy.json · lock`.
 Default: `~/.local/share/mncs-automation`.
+
+## Reconciliation (`mncs.reconcile-decision/1`)
+
+Native `mncs.automation.reconcile.v1::reconcile_tick` decides one
+projection at one instant; `adopt_observed` advances the observed
+generation after a host-performed regeneration. See
+`docs/rfcs/0002-projection-coherence.md` for the architecture.
+
+```json
+{
+  "schema_version": "mncs.reconcile-decision/1",
+  "action": 1,
+  "action_name": "regenerate",
+  "reason": 1,
+  "reason_name": "canonical-advanced",
+  "new_observed": 4,
+  "publish": false,
+  "publish_reason": 0,
+  "wakeup_ms": 0
+}
+```
+
+Actions 0 up-to-date · 1 regenerate · 2 await-verification ·
+3 blocked · 4 failed-verification. Reasons 0 current ·
+1 canonical-advanced · 2 verification-unknown ·
+3 verification-failed · 4 observed-ahead. Publish reasons 0 none ·
+1 threshold-reached · 2 latency-exceeded. Adopt reasons 0 adopted ·
+1 stale-regeneration · 2 regression-refused. Verdicts 0 fail ·
+1 pass · 2 unknown (mirror CondValue positions). Host codes live in
+`tools/automation/codes.py` and are cross-checked against the native
+`_code()` functions by `tests/test_reconcile.py`.

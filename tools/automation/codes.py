@@ -80,3 +80,53 @@ MISFIRE_CODES = {
     "catch-up": MISFIRE_CATCH_UP,
     "mark-missed": MISFIRE_MARK_MISSED,
 }
+
+# Reconciliation (native/mncs/automation/reconcile.mncs). Verification
+# verdict codes mirror COND_* positions: fail is False, pass is True.
+RECONCILE_SCHEMA = "mncs.reconcile-decision/1"
+
+VERDICT_FAIL = 0
+VERDICT_PASS = 1
+VERDICT_UNKNOWN = 2
+
+RECON_UP_TO_DATE = 0
+RECON_REGENERATE = 1
+RECON_AWAIT_VERIFICATION = 2
+RECON_BLOCKED = 3
+RECON_FAILED_VERIFICATION = 4
+
+RECON_REASON_CURRENT = 0
+RECON_REASON_CANONICAL_ADVANCED = 1
+RECON_REASON_VERIFICATION_UNKNOWN = 2
+RECON_REASON_VERIFICATION_FAILED = 3
+RECON_REASON_OBSERVED_AHEAD = 4
+
+RECON_PUBLISH_NONE = 0
+RECON_PUBLISH_THRESHOLD = 1
+RECON_PUBLISH_LATENCY = 2
+
+RECON_ADOPTED = 0
+RECON_ADOPT_STALE = 1
+RECON_ADOPT_REGRESSION = 2
+
+RECON_ACTION_NAMES = {
+    0: "up-to-date",
+    1: "regenerate",
+    2: "await-verification",
+    3: "blocked",
+    4: "failed-verification",
+}
+
+RECON_REASON_NAMES = {
+    0: "current",
+    1: "canonical-advanced",
+    2: "verification-unknown",
+    3: "verification-failed",
+    4: "observed-ahead",
+}
+
+VERDICT_NAMES = {
+    0: "fail",
+    1: "pass",
+    2: "unknown",
+}

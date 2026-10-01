@@ -64,6 +64,57 @@ Single-node file locking is implemented and documented. Multi-node
 operation would require election/leases; deliberately not
 half-implemented.
 
+## AUTO-P7: projection wire shapes await Commons promotion (non-blocking)
+
+`mncs.reconcile-decision/1`, `mncs.projection-state/1`,
+`mncs.publication-receipt/1`, and the projection relation types are
+defined by their owning repositories (Automation, Store) and indexed
+in `docs/rfcs/0002-projection-coherence.md`. MNCS-Commons owns the
+family wire-contract plane (`mncs.verification-obligation-plan/1`
+precedent) and should promote these shapes to `schemas/` with
+`compat/` goldens, plus extend `family-semantic-edges/v1` with the
+projection edge types. Commons sat on a foreign branch during this
+campaign, so the shapes were defined at the producer side instead of
+moved. No duplication: producers keep semantic ownership; Commons
+would own only the promoted wire copies.
+
+## AUTO-P8: Atlas projections do not consume projection state (non-blocking)
+
+Atlas owns the dashboard projector, registry, and journal, but reads
+family state through bespoke discovery rather than projection-state
+records, and its prose journal is not derived from its canonical
+journal-event log. Atlas sat on a campaign branch during this
+campaign and was treated read-only. Desired: dashboard/journal
+project from `mncs.projection-state/1` + receipts; prose checkpoints
+derive from `mncs.journal.event.v1`; RSS stays greenfield.
+
+## AUTO-P9: Forge has no reconcile execution targets (non-blocking)
+
+Automation decides; Forge executes. No typed target yet accepts a
+reconcile decision (`projection-regenerate`, `projection-publish`)
+and returns a receipt. Forge sat on a campaign branch during this
+campaign and was treated read-only. The e2e test
+(`tests/test_reconcile.py`) drives regeneration directly; production
+wiring should go through Forge targets with receipt return.
+
+## AUTO-P10: RAVEL does not select on projection staleness (non-blocking)
+
+RAVEL owns bounded selection (`mncs.verification-plan/1`). It does
+not yet consume projection staleness when deciding what to verify
+next. RAVEL sat on a campaign branch during this campaign and was
+treated read-only. Desired: stale projections join the evidence the
+obligation planners select over.
+
+## AUTO-P11: engine has no projection watch condition (future)
+
+The native reconcile decision (`native/mncs/automation/reconcile.mncs`)
+is callable and tested, and the occurrence machinery already gives
+at-most-once + crash recovery, but no `projection` watch condition
+observes canonical/observed/verdict triples into the engine yet.
+Explicit follow-up, not half-implemented: conditions stay
+`test-verdict` and `path-changed` until a projection observer with
+documented canonical-state sourcing lands.
+
 ## Closed during this campaign
 
 - Typed `mncs call` wire format (HostExecutionValue tags) and finite

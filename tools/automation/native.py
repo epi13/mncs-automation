@@ -126,8 +126,8 @@ def _plain(value: dict[str, Any]) -> Any:
     if tag == "boolean":
         return body["value"]
     if tag == "finite":
-        return {"variant": body["variant"],
-                "type": body.get("type"),
+        return {"variant": body.get("variant_identity", body.get("variant")),
+                "type": body.get("type_identity", body.get("type")),
                 "discriminant": body.get("discriminant")}
     if tag == "record":
         fields = body["fields"]
@@ -194,4 +194,61 @@ def evaluate_tick(*, mncs: str, libraries: list[str] | None = None,
                 "missed_from", "missed_to", "new_prev"):
         if key not in decision:
             raise NativeError(f"native decision missing {key}")
+    return decision
+
+
+RECONCILE_PROGRAM = str(NATIVE_DIR / "mncs" / "automation" / "reconcile.mncs")
+RECONCILE_MODULE = "mncs.automation.reconcile.v1"
+
+
+def reconcile_tick(*, mncs: str, libraries: list[str] | None = None,
+                   timeout_s: int = 60, **fields: Any) -> dict[str, Any]:
+    """Call native `reconcile_tick`; return the decoded ReconcileDecision."""
+    order = ("canonical_gen", "observed_gen", "verdict", "require_verified",
+             "unpublished", "threshold", "oldest_unpublished_ms", "now_ms",
+             "max_latency_ms")
+    args = [{"integer": {"value": int(fields[name])}} for name in order]
+    document = call_function(
+        mncs=mncs,
+        program=RECONCILE_PROGRAM,
+        module=RECONCILE_MODULE,
+        function="reconcile_tick",
+        args=args,
+        libraries=default_libraries((libraries or []) + [str(NATIVE_DIR)]),
+        timeout_s=timeout_s,
+    )
+    if document.get("status") != "returned":
+        raise NativeError(f"native reconcile failed: "
+                          f"{document.get('error', document)}")
+    decision = decode_record(document["call"]["returned"])
+    for key in ("action", "reason", "new_observed", "publish",
+                "publish_reason", "wakeup_ms"):
+        if key not in decision:
+            raise NativeError(f"native reconcile decision missing {key}")
+    return decision
+
+
+def adopt_observed(*, mncs: str, libraries: list[str] | None = None,
+                   timeout_s: int = 60, observed_gen: int,
+                   regenerated_gen: int,
+                   canonical_gen: int) -> dict[str, Any]:
+    """Call native `adopt_observed`; return the decoded AdoptDecision."""
+    args = [{"integer": {"value": int(value)}} for value in
+            (observed_gen, regenerated_gen, canonical_gen)]
+    document = call_function(
+        mncs=mncs,
+        program=RECONCILE_PROGRAM,
+        module=RECONCILE_MODULE,
+        function="adopt_observed",
+        args=args,
+        libraries=default_libraries((libraries or []) + [str(NATIVE_DIR)]),
+        timeout_s=timeout_s,
+    )
+    if document.get("status") != "returned":
+        raise NativeError(f"native adopt failed: "
+                          f"{document.get('error', document)}")
+    decision = decode_record(document["call"]["returned"])
+    for key in ("accept", "new_observed", "reason"):
+        if key not in decision:
+            raise NativeError(f"native adopt decision missing {key}")
     return decision
