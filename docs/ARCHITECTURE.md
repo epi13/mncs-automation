@@ -30,6 +30,13 @@ definition (structured JSON, validated)
   append-only occurrence log, artifacts) with atomic writes and crash
   recovery (pending invocations resolve to UNKNOWN, never re-fire).
 - Typed target descriptors and per-invocation authorization checks.
+- Projection reconciliation decisions: `reconcile_tick` (stale/current/
+  gated/blocked, plus threshold/latency publication) and
+  `adopt_observed` (monotonic observed-generation advance), both native
+  in `native/mncs/automation/reconcile.mncs`. Automation decides
+  *whether* a projection must regenerate; document splicing stays with
+  mncs-doc, durable projection bytes with mncs-store, execution with
+  Forge/Test/Doctor. See `docs/rfcs/0002-projection-coherence.md`.
 
 ## What Automation explicitly does not own
 

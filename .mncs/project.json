@@ -10,7 +10,7 @@
     "layout": "mncs.repository-layout/1",
     "surfaces": [
       {"path": "docs/", "class": "canonical", "authority": "mncs-automation"},
-      {"path": "native/", "class": "canonical", "authority": "mncs-automation", "note": "Native time/schedule/trigger/evaluation semantics with self-contained test blocks."},
+      {"path": "native/", "class": "canonical", "authority": "mncs-automation", "note": "Native time/schedule/trigger/evaluation/reconcile semantics with self-contained test blocks."},
       {"path": "tools/", "class": "host-boundary", "note": "Thin transport bridge: clocks, tzdata, atomic persistence, wakeup loop, condition observation, typed target execution, CLI. No decision logic."},
       {"path": "tests/", "class": "canonical", "note": "Deterministic host suite over virtual time plus fixtures."}
     ]
@@ -19,7 +19,8 @@
     "provides": [
       {"contract": "automation-definition", "version": "1", "kind": "persistent-automation-definition", "stability": "experimental", "fingerprint_sources": ["tools/automation/model.py", "tests/test_automation.py"]},
       {"contract": "automation-evaluation", "version": "1", "kind": "native-tick-decision", "stability": "experimental", "fingerprint_sources": ["native/", "tools/automation/native.py", "tests/test_automation.py"]},
-      {"contract": "automation-occurrence", "version": "1", "kind": "occurrence-and-invocation-record", "stability": "experimental", "fingerprint_sources": ["tools/automation/engine.py", "tests/test_automation.py"]}
+      {"contract": "automation-occurrence", "version": "1", "kind": "occurrence-and-invocation-record", "stability": "experimental", "fingerprint_sources": ["tools/automation/engine.py", "tests/test_automation.py"]},
+      {"contract": "automation-reconciliation", "version": "1", "kind": "native-reconcile-decision", "stability": "experimental", "fingerprint_sources": ["native/mncs/automation/reconcile.mncs", "tools/automation/native.py", "tools/automation/codes.py", "tests/test_reconcile.py", "docs/rfcs/0002-projection-coherence.md"]}
     ],
     "consumes": [
       {"contract": "mncs.compiler.call/1", "envelope": {"op": "any"}, "required": true},
@@ -28,7 +29,8 @@
       {"contract": "mncs-doctor.report/1", "envelope": {"op": "any"}, "required": false}
     ],
     "tests": [
-      {"test": "automation-tests", "covers": ["automation-definition", "automation-evaluation", "automation-occurrence"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_automation"]}}
+      {"test": "automation-tests", "covers": ["automation-definition", "automation-evaluation", "automation-occurrence"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_automation"]}},
+      {"test": "reconcile-tests", "covers": ["automation-reconciliation"], "obligation": "self", "command": {"argv": ["python3", "-m", "unittest", "tests.test_reconcile"]}}
     ]
   }
 }
