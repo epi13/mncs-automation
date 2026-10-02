@@ -1,0 +1,17 @@
+mncs 0.18;
+
+module mncs.automation.revisit.v1;
+
+// Generic wait/event vocabulary shared by projection and coherence routing.
+// Wait: none=0, claim=1, verification=2, provider=3, repository=4.
+// Event: tick=0, claim=1, verdict=2, provider=3, repository=4, declaration=5.
+fn revisit_tick(wait: u64, event: u64) -> (revisit: bool) {
+    if wait == 0 { return false; }
+    if event == 5 { return wait >= 1 && wait <= 4; }
+    if event == 0 { return false; }
+    if wait == 1 { return event == 1; }
+    if wait == 2 { return event == 2; }
+    if wait == 3 { return event == 3; }
+    if wait == 4 { return event == 4 || event == 1; }
+    return false;
+}

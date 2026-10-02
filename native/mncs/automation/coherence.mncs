@@ -1,0 +1,44 @@
+mncs 0.18;
+
+module mncs.automation.coherence.v1;
+
+use mncs.automation.revisit.v1 as revisit;
+
+// These are declaration-spelling facts supplied by the filesystem adapter.
+// Unclassified files conservatively invalidate source consumers.
+fn classify_file(declaration: u64, prose: u64) -> (result: u64) {
+    if declaration == 1 { return 1; }
+    if prose == 1 { return 13; }
+    return 2;
+}
+
+fn classify_files(facts: [[u64; 2]; up_to 16]) -> (result: [u64; up_to 16]) {
+    iterate i over facts carrying codes: [u64; 16] = [0; 16] {
+        let row: [u64; 2] = facts[i];
+        next codes = replace(codes, i, classify_file(row[0], row[1]));
+    }
+    return codes[0..facts.len];
+}
+
+// Disposition: current=0, affected=1, bounded reconciliation=2, bootstrap=3.
+// Masks are declared input subscriptions and observed fact categories, not
+// domain verdicts. Unknown observation chains cannot authorize reuse.
+fn pass_tick(current: u64, chain_known: u64, interests: u64, changes: u64,
+             scope_matches: u64, wait: u64, event: u64, due: u64) -> (result: u64) {
+    if current != 1 { return 3; }
+    if chain_known != 1 { return 2; }
+    if scope_matches != 1 { return 0; }
+    if (interests & changes) != 0 { return 1; }
+    if revisit.revisit_tick(wait, event) { return 1; }
+    if due == 1 { return 1; }
+    return 0;
+}
+
+fn route_batch(facts: [[u64; 8]; up_to 16]) -> (result: [u64; up_to 16]) {
+    iterate i over facts carrying codes: [u64; 16] = [0; 16] {
+        let row: [u64; 8] = facts[i];
+        next codes = replace(codes, i, pass_tick(
+            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]));
+    }
+    return codes[0..facts.len];
+}

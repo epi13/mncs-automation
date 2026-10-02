@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from automation import codes, native  # noqa: E402
 
-WORKSPACE = REPO.parent
+WORKSPACE = Path(os.environ.get("MNCS_WORKSPACE_ROOT", str(REPO.parent)))
 DOC_REPO = WORKSPACE / "mncs-doc"
 PROJECT_CLI = DOC_REPO / "tools" / "project.py"
 STORE_RECEIPT = (WORKSPACE / "mncs-store" / "src" / "store"

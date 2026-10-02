@@ -26,7 +26,7 @@ from automation import codes, engine, model, native, store, targets  # noqa: E40
 from automation.model import DefinitionError  # noqa: E402
 
 FIXTURES = REPO / "tests" / "fixtures"
-WORKSPACE = REPO.parent
+WORKSPACE = Path(os.environ.get("MNCS_WORKSPACE_ROOT", str(REPO.parent)))
 
 
 def find_mncs() -> str | None:

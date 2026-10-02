@@ -52,6 +52,8 @@ mncs 0.17;
 
 module mncs.automation.projection.v1;
 
+use mncs.automation.revisit.v1 as generic_revisit;
+
 use mncs.automation.reconcile;
 use mncs.test.assertions;
 use mncs.test.suite;
@@ -254,32 +256,7 @@ fn event_code(event: RevisitEvent) -> (code: u64) {
 // wakes only on the events that can resolve it; unknown codes never
 // revisit, so a host that invents codes fails closed into quiet.
 fn revisit_tick(wait: u64, event: u64) -> (revisit: bool) {
-    if wait == wait_code(WaitReason.None) {
-        return false;
-    }
-    if event == event_code(RevisitEvent.DeclarationChanged) {
-        return wait == wait_code(WaitReason.Claim)
-            || wait == wait_code(WaitReason.Verification)
-            || wait == wait_code(WaitReason.Provider)
-            || wait == wait_code(WaitReason.RepoState);
-    }
-    if event == event_code(RevisitEvent.Tick) {
-        return false;
-    }
-    if wait == wait_code(WaitReason.Claim) {
-        return event == event_code(RevisitEvent.ClaimChanged);
-    }
-    if wait == wait_code(WaitReason.Verification) {
-        return event == event_code(RevisitEvent.VerdictResolved);
-    }
-    if wait == wait_code(WaitReason.Provider) {
-        return event == event_code(RevisitEvent.ProviderChanged);
-    }
-    if wait == wait_code(WaitReason.RepoState) {
-        return event == event_code(RevisitEvent.RepoChanged)
-            || event == event_code(RevisitEvent.ClaimChanged);
-    }
-    return false;
+    return generic_revisit.revisit_tick(wait, event);
 }
 
 fn plans_equal(left: ProjectionPlan, right: ProjectionPlan) -> (equal: bool) {
