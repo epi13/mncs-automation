@@ -42,3 +42,20 @@ fn route_batch(facts: [[u64; 8]; up_to 16]) -> (result: [u64; up_to 16]) {
     }
     return codes[0..facts.len];
 }
+
+// Known complete subject/obligation subscriptions can suppress an unrelated
+// event. An incomplete impact or subscription always requires reconsideration.
+fn scoped_event(category_matches: u64, complete: u64,
+                subject_matches: u64, obligation_matches: u64) -> (affected: u64) {
+    if category_matches != 1 { return 0; }
+    if complete != 1 { return 1; }
+    if subject_matches == 1 || obligation_matches == 1 { return 1; }
+    return 0;
+}
+fn scoped_events(facts: [[u64; 4]; up_to 16]) -> (result: [u64; up_to 16]) {
+    iterate i over facts carrying codes: [u64; 16] = [0; 16] {
+        let row: [u64; 4] = facts[i];
+        next codes = replace(codes, i, scoped_event(row[0], row[1], row[2], row[3]));
+    }
+    return codes[0..facts.len];
+}

@@ -1,0 +1,92 @@
+{
+  "schema_version": "mncs.provider-artifact-declaration/1",
+  "provider": {
+    "repository": "mncs-automation",
+    "contract": "automation-coherence-routing",
+    "version": "1"
+  },
+  "build_capability": "mncs-automation:coherence-artifact-reconcile",
+  "configuration": {
+    "target": "mncs-research-bytecode",
+    "profile": "retained-bounded",
+    "effects": []
+  },
+  "abi": {
+    "backend_schema": "0.6",
+    "runtime": "mncs-embed retained session C ABI",
+    "wire": "canonical MNCS value ABI"
+  },
+  "stdlib": {
+    "applicability": "not-consumed",
+    "evidence": "declared module closure contains only Automation, Commons provenance and Doctor provider modules"
+  },
+  "source": {
+    "repository": "mncs-automation",
+    "path": "native/mncs/automation/provider.mncs"
+  },
+  "admission": {
+    "repository": "MNCS-Commons",
+    "path": "src/mncs_commons/mesh/mncs/commons/family/provenance/v1.mncs",
+    "module": "mncs.commons.family.provenance.v1"
+  },
+  "remediation": {
+    "repository": "mncs-doctor",
+    "path": "mncs/doctor/provider.mncs",
+    "module": "doctor.provider.v1"
+  },
+  "dependency_roots": [
+    {
+      "repository": "mncs-automation",
+      "path": "native"
+    },
+    {
+      "repository": "MNCS-Commons",
+      "path": "src/mncs_commons/mesh"
+    },
+    {
+      "repository": "mncs-doctor",
+      "path": "mncs"
+    }
+  ],
+  "modules": [
+    "mncs.automation.provider.v1",
+    "mncs.automation.coherence.v1",
+    "mncs.automation.revisit.v1",
+    "mncs.commons.family.provenance.v1",
+    "doctor.provider.v1"
+  ],
+  "inputs": [
+    {
+      "repository": "mncs-automation",
+      "path": "native/mncs/automation/provider.mncs"
+    },
+    {
+      "repository": "mncs-automation",
+      "path": "native/mncs/automation/coherence.mncs"
+    },
+    {
+      "repository": "mncs-automation",
+      "path": "native/mncs/automation/revisit.mncs"
+    },
+    {
+      "repository": "mncs-automation",
+      "path": ".mncs/coherence-artifact.json"
+    },
+    {
+      "repository": "mncs-automation",
+      "path": "tools/coherence_provider.py"
+    },
+    {
+      "repository": "MNCS-Commons",
+      "path": "src/mncs_commons/mesh/mncs/commons/family/provenance/v1.mncs"
+    },
+    {
+      "repository": "mncs-doctor",
+      "path": "mncs/doctor/provider.mncs"
+    },
+    {
+      "repository": "mncs-automation",
+      "path": ".mncs/project.json"
+    }
+  ]
+}

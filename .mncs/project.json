@@ -1,7 +1,7 @@
 {
   "schema_version": "mncs-family.repository-manifest/v0alpha1",
   "repository": "mncs-automation",
-  "revision": 1,
+  "revision": 2,
   "manifest_location": "in-repository",
   "authority": {
     "note": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems."
@@ -169,6 +169,22 @@
           "tests/test_coherence.py",
           "docs/INCREMENTAL_COHERENCE.md"
         ]
+      },
+      {
+        "contract": "coherence-artifact-reconcile",
+        "version": "1",
+        "kind": "bounded-provider-artifact-reconcile",
+        "effects": [
+          "read",
+          "execute"
+        ],
+        "artifact_declaration": ".mncs/coherence-artifact.json",
+        "output_scope": "selected Environment provider cache; no source edits or publication",
+        "fingerprint_sources": [
+          ".mncs/coherence-artifact.json",
+          "tools/coherence_provider.py",
+          "native/mncs/automation/provider.mncs"
+        ]
       }
     ],
     "consumes": [
@@ -199,6 +215,39 @@
           "op": "any"
         },
         "required": false
+      },
+      {
+        "contract": "mncs-commons.provider-provenance",
+        "required": false,
+        "envelope": {
+          "op": "any"
+        },
+        "evidence_refs": [
+          ".mncs/coherence-artifact.json"
+        ],
+        "scope": "retained coherence provider"
+      },
+      {
+        "contract": "mncs-doctor.provider-artifact-remediation",
+        "required": false,
+        "envelope": {
+          "op": "any"
+        },
+        "evidence_refs": [
+          ".mncs/coherence-artifact.json"
+        ],
+        "scope": "retained coherence provider"
+      },
+      {
+        "contract": "mncs-forge.provider-artifact-execution",
+        "required": false,
+        "envelope": {
+          "op": "any"
+        },
+        "evidence_refs": [
+          "tools/coherence_provider.py"
+        ],
+        "scope": "retained coherence provider"
       }
     ],
     "tests": [

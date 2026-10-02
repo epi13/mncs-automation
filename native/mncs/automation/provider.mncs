@@ -1,0 +1,17 @@
+mncs 0.18;
+module mncs.automation.provider.v1;
+use mncs.automation.coherence.v1 as coherence;
+use mncs.commons.family.provenance.v1 as provenance;
+use doctor.provider.v1 as doctor;
+
+fn route(facts: [[u64; 8]; up_to 16]) -> (result: [u64; up_to 16]) {
+    return coherence.route_batch(facts);
+}
+fn state(expected: [byte; 32], built: [byte; 32], known: u64,
+         present: u64, intact: u64) -> (result: u64) {
+    return provenance.artifact_state(expected, built, known, present, intact);
+}
+fn repair(state: u64, owner: u64, confined: u64, authority: u64,
+          attempts: u64) -> (result: u64) {
+    return doctor.repair_artifact(state, owner, confined, authority, attempts);
+}
