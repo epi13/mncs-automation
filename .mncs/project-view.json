@@ -221,7 +221,7 @@
   "purpose": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems.",
   "repository": "mncs-automation",
   "schema_version": "mncs.project-view/1",
-  "source_identity": "sha256:5915abf15ab91bd31ecf206de9a89a992cd2da27bc36e416b21e3954b9f6f9d7",
+  "source_identity": "sha256:540ec73824bab29c5084b6008e1b8b77c0182c7fd82a482267fafef0e900ecc4",
   "structure": {
     "layout": "mncs.repository-layout/1",
     "surfaces": [
