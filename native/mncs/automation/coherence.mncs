@@ -1,8 +1,18 @@
 mncs 0.18;
 
 module mncs.automation.coherence.v1;
-
 use mncs.automation.revisit.v1 as revisit;
+
+// Declared outputs are never source changes. Known current output writes are
+// quiet; divergence/missing output wakes the projection owner only.
+fn classify_projection_files(facts: [[u64; 4]; up_to 16]) -> (result: [u64; up_to 16]) {
+    iterate i over facts carrying codes: [u64; 16] = [0; 16] {
+        let row: [u64; 4] = facts[i];
+        let code: u64 = select(row[2] == 1, select(row[3] == 1, 0, 10), classify_file(row[0], row[1]));
+        next codes = replace(codes, i, code);
+    }
+    return codes[0..facts.len];
+}
 
 // These are declaration-spelling facts supplied by the filesystem adapter.
 // Unclassified files conservatively invalidate source consumers.

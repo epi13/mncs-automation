@@ -1,5 +1,24 @@
 # mncs-automation
 
+<!-- MNCS:generated:begin -->
+## Project entry
+
+mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems.
+
+Declared capabilities (declarations do not establish execution health):
+
+- `automation-adoption/1` — native-adopt-decision (experimental)
+- `automation-definition/1` — persistent-automation-definition (experimental)
+- `automation-evaluation/1` — native-tick-decision (experimental)
+- `automation-occurrence/1` — occurrence-and-invocation-record (experimental)
+- `automation-reconciliation/1` — native-reconcile-decision (experimental)
+- `automation-revisit/1` — native-revisit-decision (experimental)
+- `coherence-artifact-reconcile/1` — bounded-provider-artifact-reconcile (experimental)
+- `coherence-routing/1` — native-affected-pass-decision (experimental)
+
+Semantic sources and ownership: `.mncs/projections.json`.
+<!-- MNCS:generated:end -->
+
 Persistent, typed, explainable automation for MNCS. Automation decides
 **when** declared work becomes eligible; Forge, Test, and Doctor decide
 how it executes. There is one canonical implementation.

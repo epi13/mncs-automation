@@ -1,0 +1,15 @@
+{
+  "schema_version": "mncs.project-intent/1",
+  "purpose": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems.",
+  "entry": [],
+  "milestones": [
+    {
+      "id": "mncs-automation:projection-conformance",
+      "title": "Declared ambient projection surfaces satisfy their contract",
+      "subject_slot": "declarations",
+      "evidence": "projection-conformance",
+      "dependencies": [],
+      "blockers": []
+    }
+  ]
+}

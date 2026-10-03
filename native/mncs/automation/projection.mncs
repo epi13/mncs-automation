@@ -180,7 +180,7 @@ fn gate_fn(
     if target == 1 && splice_ok == 0 {
         return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredRegionExplicitOnly) };
     }
-    if target == 0 && output == 3 {
+    if output == 3 {
         return GateVerdict { gate: gate_code(Gate.Defer), reason: gate_reason_code(GateReason.DeferredOutputDiverged) };
     }
     return GateVerdict { gate: gate_code(Gate.Proceed), reason: gate_reason_code(GateReason.Ok) };
@@ -212,8 +212,12 @@ fn plan_tick(
 ) -> (result: ProjectionPlan) {
     let effective: u64 = canonical_gen +% select(inputs_changed != 0, 1, 0);
     let gate: GateVerdict = gate_fn(repo, branch, claim, target, region, output, splice_ok, defer_count, defer_bound);
+    // An absent target is not current even when its source epoch is unchanged.
+    // Rebuild the same epoch; missing output never invents a source change.
+    let seen: u64 = select(output == 0 && effective > 0 && observed_gen == effective,
+                           effective -% 1, observed_gen);
     let decision: ReconcileDecision = reconcile_tick(
-        effective, observed_gen, verdict, require_verified,
+        effective, seen, verdict, require_verified,
         unpublished, threshold, oldest_unpublished_ms, now_ms, max_latency_ms);
     let proceed: bool = gate.gate == gate_code(Gate.Proceed);
     let regenerate: bool = decision.action == action_code(ReconAction.Regenerate);

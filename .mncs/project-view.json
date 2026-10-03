@@ -1,0 +1,286 @@
+{
+  "capabilities": [
+    {
+      "contract": "automation-definition",
+      "fingerprint_sources": [
+        "tools/automation/model.py",
+        "tests/test_automation.py"
+      ],
+      "kind": "persistent-automation-definition",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "automation-evaluation",
+      "fingerprint_sources": [
+        "native/",
+        "tools/automation/native.py",
+        "tests/test_automation.py"
+      ],
+      "kind": "native-tick-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "automation-occurrence",
+      "fingerprint_sources": [
+        "tools/automation/engine.py",
+        "tests/test_automation.py"
+      ],
+      "kind": "occurrence-and-invocation-record",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "automation-reconciliation",
+      "effects": [
+        "read"
+      ],
+      "fingerprint_sources": [
+        "native/mncs/automation/reconcile.mncs",
+        "native/mncs/automation/projection.mncs",
+        "tools/reconcile.py",
+        "tools/automation/native.py",
+        "tools/automation/codes.py",
+        "tests/test_reconcile.py",
+        "docs/rfcs/0002-projection-coherence.md",
+        "native/mncs/automation/revisit.mncs"
+      ],
+      "invocation": {
+        "fixed_argv": [
+          "plan"
+        ],
+        "kind": "python",
+        "path": "tools/reconcile.py",
+        "toolchain": {
+          "path": "target/release/mncs",
+          "repository": "mncs-language"
+        },
+        "toolchain_env": "MNCS_BIN"
+      },
+      "kind": "native-reconcile-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "automation-adoption",
+      "effects": [
+        "read"
+      ],
+      "fingerprint_sources": [
+        "native/mncs/automation/reconcile.mncs",
+        "tools/reconcile.py",
+        "tools/automation/native.py",
+        "tools/automation/codes.py",
+        "tests/test_reconcile.py",
+        "docs/rfcs/0002-projection-coherence.md"
+      ],
+      "invocation": {
+        "fixed_argv": [
+          "adopt"
+        ],
+        "kind": "python",
+        "path": "tools/reconcile.py",
+        "toolchain": {
+          "path": "target/release/mncs",
+          "repository": "mncs-language"
+        },
+        "toolchain_env": "MNCS_BIN"
+      },
+      "kind": "native-adopt-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "automation-revisit",
+      "effects": [
+        "read"
+      ],
+      "fingerprint_sources": [
+        "native/mncs/automation/projection.mncs",
+        "tools/reconcile.py",
+        "tools/automation/native.py",
+        "tools/automation/codes.py",
+        "tests/test_reconcile.py",
+        "docs/rfcs/0002-projection-coherence.md",
+        "native/mncs/automation/revisit.mncs"
+      ],
+      "invocation": {
+        "fixed_argv": [
+          "revisit"
+        ],
+        "kind": "python",
+        "path": "tools/reconcile.py",
+        "toolchain": {
+          "path": "target/release/mncs",
+          "repository": "mncs-language"
+        },
+        "toolchain_env": "MNCS_BIN"
+      },
+      "kind": "native-revisit-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "contract": "coherence-routing",
+      "effects": [
+        "read"
+      ],
+      "fingerprint_sources": [
+        "native/mncs/automation/coherence.mncs",
+        "native/mncs/automation/revisit.mncs",
+        "tests/test_coherence.py",
+        "docs/INCREMENTAL_COHERENCE.md"
+      ],
+      "kind": "native-affected-pass-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
+      "artifact_declaration": ".mncs/coherence-artifact.json",
+      "contract": "coherence-artifact-reconcile",
+      "effects": [
+        "read",
+        "execute"
+      ],
+      "fingerprint_sources": [
+        ".mncs/coherence-artifact.json",
+        "tools/coherence_provider.py",
+        "native/mncs/automation/provider.mncs"
+      ],
+      "kind": "bounded-provider-artifact-reconcile",
+      "output_scope": "selected Environment provider cache; no source edits or publication",
+      "stability": "experimental",
+      "version": "1"
+    }
+  ],
+  "dependencies": [
+    {
+      "contract": "mncs.compiler.call/1",
+      "envelope": {
+        "op": "any"
+      },
+      "required": true
+    },
+    {
+      "contract": "mncs.compiler.test/1",
+      "envelope": {
+        "op": "any"
+      },
+      "required": true
+    },
+    {
+      "contract": "mncs.compiler.declaration-inventory/1",
+      "envelope": {
+        "op": "any"
+      },
+      "required": true
+    },
+    {
+      "contract": "mncs-doctor.report/1",
+      "envelope": {
+        "op": "any"
+      },
+      "required": false
+    },
+    {
+      "contract": "mncs-commons.provider-provenance",
+      "envelope": {
+        "op": "any"
+      },
+      "evidence_refs": [
+        ".mncs/coherence-artifact.json"
+      ],
+      "required": false,
+      "scope": "retained coherence provider"
+    },
+    {
+      "contract": "mncs-doctor.provider-artifact-remediation",
+      "envelope": {
+        "op": "any"
+      },
+      "evidence_refs": [
+        ".mncs/coherence-artifact.json"
+      ],
+      "required": false,
+      "scope": "retained coherence provider"
+    },
+    {
+      "contract": "mncs-forge.provider-artifact-execution",
+      "envelope": {
+        "op": "any"
+      },
+      "evidence_refs": [
+        "tools/coherence_provider.py"
+      ],
+      "required": false,
+      "scope": "retained coherence provider"
+    }
+  ],
+  "entry": [],
+  "purpose": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems.",
+  "repository": "mncs-automation",
+  "schema_version": "mncs.project-view/1",
+  "source_identity": "sha256:5915abf15ab91bd31ecf206de9a89a992cd2da27bc36e416b21e3954b9f6f9d7",
+  "structure": {
+    "layout": "mncs.repository-layout/1",
+    "surfaces": [
+      {
+        "artifact_class": "authoritative",
+        "authority": "mncs-automation",
+        "class": "canonical",
+        "path": "docs/"
+      },
+      {
+        "artifact_class": "authoritative",
+        "authority": "mncs-automation",
+        "class": "canonical",
+        "note": "Native time/schedule/trigger/evaluation/reconcile semantics with self-contained test blocks.",
+        "path": "native/"
+      },
+      {
+        "class": "host-boundary",
+        "note": "Thin transport bridge: clocks, tzdata, atomic persistence, wakeup loop, condition observation, typed target execution, CLI. No decision logic.",
+        "path": "tools/"
+      },
+      {
+        "artifact_class": "authoritative",
+        "class": "canonical",
+        "note": "Deterministic host suite over virtual time plus fixtures.",
+        "path": "tests/"
+      },
+      {
+        "artifact_class": "authoritative",
+        "authority": "mncs-automation",
+        "class": "canonical",
+        "note": "Authored project intent; execution state is evidence-derived.",
+        "path": ".mncs/project-state.json"
+      },
+      {
+        "artifact_class": "authoritative",
+        "authority": "mncs-automation",
+        "class": "canonical",
+        "note": "Explicit semantic projection ownership and dependencies.",
+        "path": ".mncs/projections.json"
+      },
+      {
+        "artifact_class": "mixed",
+        "class": "generated",
+        "note": "Mixed: only delimited semantic region is projection-owned; surrounding authored bytes are protected.",
+        "path": "README.md"
+      },
+      {
+        "artifact_class": "mixed",
+        "class": "generated",
+        "note": "Mixed: projected evidence board beside preserved authored intent.",
+        "path": "ROADMAP.md"
+      },
+      {
+        "artifact_class": "derived",
+        "class": "generated",
+        "note": "Derived machine-facing interpretation; never an execution input.",
+        "path": ".mncs/project-view.json"
+      }
+    ]
+  }
+}
