@@ -51,3 +51,7 @@ def test_file_classification_is_conservative_and_declaration_first():
 
 def test_full_bounded_batch_returns_every_decision():
     assert call('route_batch', [[1, 1, 2, 0, 1, 0, 0, 0]] * 16) == [0] * 16
+
+
+def test_projection_writes_cannot_become_source_events():
+    assert call('classify_projection_files', [[1,0,1,1],[1,0,1,0],[0,1,1,1],[0,0,0,0]]) == [0,10,0,2]
