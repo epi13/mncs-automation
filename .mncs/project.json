@@ -1,7 +1,7 @@
 {
   "schema_version": "mncs-family.repository-manifest/v0alpha1",
   "repository": "mncs-automation",
-  "revision": 3,
+  "revision": 4,
   "manifest_location": "in-repository",
   "authority": {
     "note": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems."
@@ -225,28 +225,28 @@
     ],
     "consumes": [
       {
-        "contract": "mncs.compiler.call/1",
+        "contract": "mncs.compiler.call",
         "envelope": {
           "op": "any"
         },
         "required": true
       },
       {
-        "contract": "mncs.compiler.test/1",
+        "contract": "mncs.compiler.test",
         "envelope": {
           "op": "any"
         },
         "required": true
       },
       {
-        "contract": "mncs.compiler.declaration-inventory/1",
+        "contract": "mncs.compiler.declaration-inventory",
         "envelope": {
           "op": "any"
         },
         "required": true
       },
       {
-        "contract": "mncs-doctor.report/1",
+        "contract": "mncs-doctor.report",
         "envelope": {
           "op": "any"
         },
