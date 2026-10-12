@@ -123,3 +123,23 @@ documented canonical-state sourcing lands.
   modules: used by native suites and target validation.
 - `mncs-doctor doctor --json` is side-effect-free: used as the doctor
   target with a flag allowlist.
+
+## AUTO-P12: live resource feedback lacks provider/runtime composition (open)
+
+The resource-headroom condition requires a fresh host sample plus one exact,
+retained Forge receipt and subject identity. In the protected Environment
+exercise, mncs-system-monitor:system-resource-sample returned a real host
+sample through canonical Store, but that privacy-minimized artifact contained
+no Forge execution records. Automation correctly returned UNKNOWN with
+forge-execution-records-unavailable. A temporary native engine tick then
+returned evaluation-unreachable: the mncs resolved in the Automation
+execution environment exposes a different CLI and has no call operation, so
+evaluate_tick produced no scheduling decision.
+
+Before this loop can schedule compiler work, the existing owner contracts must
+provide a receipt-correlated Monitor projection and the correct Language Service
+call runtime inside the restricted Automation environment. Verify with a real
+Forge execution, retained receipt, native Automation decision, and subsequent
+compiler admission. The current sample is not a compiler measurement and no
+resource-loop acceptance is claimed. See
+evidence/resource-sample-protected-read-20261012.json.
