@@ -181,6 +181,24 @@ class DefinitionTests(unittest.TestCase):
         with self.assertRaises(DefinitionError):
             model.validate_condition({**base, "unowned_policy": True})
 
+    def test_contract_fingerprints_cover_resource_condition_and_recovery(self) -> None:
+        manifest = json.loads((REPO / ".mncs/project.json").read_text())
+        provides = manifest["contracts"]["provides"]
+        evaluation = next(item for item in provides
+                          if item["contract"] == "automation-evaluation")
+        occurrence = next(item for item in provides
+                          if item["contract"] == "automation-occurrence")
+        self.assertIn("tools/automation/conditions.py",
+                      evaluation["fingerprint_sources"])
+        self.assertIn("tools/automation/codes.py",
+                      evaluation["fingerprint_sources"])
+        self.assertIn("tools/automation/model.py",
+                      evaluation["fingerprint_sources"])
+        self.assertIn("tools/automation/engine.py",
+                      occurrence["fingerprint_sources"])
+        self.assertIn("tools/automation/conditions.py",
+                      occurrence["fingerprint_sources"])
+
     def test_daily_local_needs_real_timezone(self) -> None:
         with self.assertRaises(DefinitionError):
             model.validate_definition({

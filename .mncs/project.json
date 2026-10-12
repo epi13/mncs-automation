@@ -87,6 +87,9 @@
         "fingerprint_sources": [
           "native/",
           "tools/automation/native.py",
+          "tools/automation/conditions.py",
+          "tools/automation/codes.py",
+          "tools/automation/model.py",
           "tests/test_automation.py"
         ]
       },
@@ -97,6 +100,7 @@
         "stability": "experimental",
         "fingerprint_sources": [
           "tools/automation/engine.py",
+          "tools/automation/conditions.py",
           "tests/test_automation.py"
         ]
       },
