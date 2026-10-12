@@ -133,6 +133,8 @@ def _recover_unlocked(paths: dict[str, Path]) -> list[dict[str, Any]]:
                   "reason_name": "recovery-pending-without-outcome",
                   "target": {"kind": definition["target"]["kind"]},
                   "invocation_id": pending.get("invocation_id"),
+                  "condition_observation": pending.get(
+                      "condition_observation"),
                   "outcome": {"status": "unknown",
                               "reason": "interrupted-before-outcome"},
                   "condition_value": None}
@@ -518,7 +520,8 @@ def _fire(*, paths: dict[str, Path], definition: dict[str, Any],
         state["pending"] = {"occurrence_id": occ, "seq": seq,
                             "trigger_kind": trigger_kind,
                             "invocation_id": invocation,
-                            "started_ms": now_ms}
+                            "started_ms": now_ms,
+                            "condition_observation": condition_observation}
         store.write_json(state_path, state)
         try:
             outcome = targets.execute(

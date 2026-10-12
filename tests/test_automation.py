@@ -15,6 +15,7 @@ import random
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -577,6 +578,68 @@ class WatchTests(EngineCase):
         self.assertEqual(stale, codes.COND_UNKNOWN)
         self.assertEqual(stale_evidence["reason"],
                          "monitor-observation-stale-or-in-future")
+
+    @need_mncs
+    def test_resource_headroom_crash_recovery_keeps_decision_evidence(self) -> None:
+        monitor = self.tmp / "monitor-crash.json"
+        execution = "forge-receipt-resource-crash"
+        subject = "c" * 64
+        monitor.write_text(json.dumps({
+            "schema": "mncs.system-monitor.snapshot.v1",
+            "observed_at": 10_000,
+            "host": {"memory_available_bytes": 16_384},
+            "execution_records": {
+                "schema": "mncs.system-monitor.execution-records.v1",
+                "records": [{
+                    "execution": execution,
+                    "source": "forge_receipt",
+                    "subject_record_id": "compiler-task-before-crash",
+                    "subject_identity": subject,
+                    "resource_envelope": {
+                        "declared": True,
+                        "memory_max_bytes": 8192,
+                    },
+                    "resource_observations": {
+                        "cgroup_memory_peak_bytes": 4096,
+                    },
+                }],
+            },
+        }), encoding="utf-8")
+        aid = self.define({
+            "schema_version": codes.DEFINITION_SCHEMA,
+            "name": "resource-crash-recovery",
+            "trigger": {"kind": "watch", "watch": {
+                "cadence_ms": 1_000, "edge": "rising",
+                "condition": {
+                    "kind": "resource-headroom",
+                    "path": str(monitor),
+                    "measurement_execution": execution,
+                    "measurement_subject_identity": subject,
+                    "intent_identity": "compiler-intent-before-crash",
+                    "requested_memory_bytes": 5000,
+                    "measurement_scale_percent": 125,
+                    "minimum_host_headroom_bytes": 1024,
+                    "max_age_ms": 60_000,
+                },
+            }},
+            "target": self.ping_target(),
+            "granted_capabilities": ["call:execute"],
+        })
+
+        with patch("automation.targets.execute", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.tick(10_000)
+        pending = self.state(aid)["pending"]
+        observation = pending["condition_observation"]
+        self.assertEqual(observation["measurement_execution"], execution)
+        self.assertEqual(observation["measured_peak_bytes"], 4096)
+
+        recovered = engine.recover(state_dir=self.state_dir)
+        self.assertEqual(recovered[0]["outcome"]["status"], "unknown")
+        self.assertEqual(recovered[0]["condition_observation"], observation)
+        occurrence = self.occurrences(aid)[-1]
+        self.assertEqual(occurrence["decision"], "unknown")
+        self.assertEqual(occurrence["condition_observation"], observation)
 
 
 class DryRunPurityTests(EngineCase):
