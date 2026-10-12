@@ -1,0 +1,25 @@
+{
+  "schema_version": "mncs-automation.resource-sample-condition-evidence/1",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "recorded_at": "2026-10-12T07:41:19Z",
+  "owner": "mncs-automation",
+  "session_id": "ses_7226fbcfe65820f7",
+  "source": {
+    "base_revision": "b3149a25f4cf18ea57f33ddac99ad23f5c3f879f",
+    "files": [
+      {"path": "tools/automation/conditions.py", "sha256": "9360c38e426d25dcf86e7c98899efb5dadc10ea9a62966f45f07c420c899d147"},
+      {"path": "tests/test_automation.py", "sha256": "bfa447c0a55746a5c26297ade4530be6d11519c9f65d7f2905565ebfd3f84b42"}
+    ]
+  },
+  "change": {
+    "consumer_schema": "mncs.system-monitor.resource-sample.v1",
+    "condition": "resource-headroom",
+    "behavior": "requires exact Forge execution identity, subject digest, observed available-memory status, and freshness; missing facts remain UNKNOWN"
+  },
+  "validation": {
+    "focused_pytest": {"status": "pass", "passed": 5, "deselected": 36},
+    "python_compile": "pass",
+    "diff_check": "pass"
+  },
+  "readiness": "Automation condition accepts minimized Monitor evidence; no live Forge receipt or subsequent compiler admission was produced in this milestone"
+}

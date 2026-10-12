@@ -597,6 +597,61 @@ class WatchTests(EngineCase):
         self.assertEqual(stale_evidence["reason"],
                          "monitor-observation-stale-or-in-future")
 
+    def test_resource_headroom_consumes_privacy_minimized_resource_sample(self) -> None:
+        from automation.conditions import evaluate_resource_headroom
+
+        path = self.tmp / "resource-sample.json"
+        sample = {
+            "schema": "mncs.system-monitor.resource-sample.v1",
+            "observed_at": 10_000,
+            "host": {
+                "memory_available_bytes": 8_192,
+                "memory_available_status": "observed",
+            },
+            "execution_records": {
+                "schema": "mncs.system-monitor.execution-records.v1",
+                "records": [{
+                    "execution": "forge-resource-sample-one",
+                    "source": "forge_receipt",
+                    "subject_record_id": "compiler-task-before-next-run",
+                    "subject_identity": "d" * 64,
+                    "resource_envelope": {
+                        "declared": True,
+                        "memory_max_bytes": 4_096,
+                    },
+                    "resource_observations": {
+                        "cgroup_memory_peak_bytes": 3_000,
+                    },
+                }],
+            },
+        }
+        path.write_text(json.dumps(sample), encoding="utf-8")
+        arguments = {
+            "path": str(path),
+            "measurement_execution": "forge-resource-sample-one",
+            "measurement_subject_identity": "d" * 64,
+            "intent_identity": "compiler-resource-followup",
+            "requested_memory_bytes": 3_500,
+            "measurement_scale_percent": 125,
+            "minimum_host_headroom_bytes": 256,
+            "max_age_ms": 60_000,
+        }
+        decision, evidence = evaluate_resource_headroom(
+            **arguments, now_ms=15_000)
+        self.assertEqual(decision, codes.COND_TRUE)
+        self.assertEqual(evidence["measurement_execution"],
+                         "forge-resource-sample-one")
+        self.assertEqual(evidence["scaled_measurement_bytes"], 3_750)
+        self.assertEqual(evidence["remaining_after_reserve_bytes"], 4_186)
+
+        sample["host"]["memory_available_status"] = "unknown"
+        path.write_text(json.dumps(sample), encoding="utf-8")
+        unknown, unknown_evidence = evaluate_resource_headroom(
+            **arguments, now_ms=15_000)
+        self.assertEqual(unknown, codes.COND_UNKNOWN)
+        self.assertEqual(unknown_evidence["reason"],
+                         "host-memory-availability-not-observed")
+
     @need_mncs
     def test_resource_headroom_crash_recovery_keeps_decision_evidence(self) -> None:
         monitor = self.tmp / "monitor-crash.json"

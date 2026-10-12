@@ -130,7 +130,12 @@ def evaluate_resource_headroom(
         return unknown(f"monitor-projection-unavailable:{str(error)[:160]}")
     if not isinstance(document, dict):
         return unknown("monitor-projection-malformed")
-    if document.get("schema") != "mncs.system-monitor.snapshot.v1":
+    schema = document.get("schema")
+    resource_sample = schema == "mncs.system-monitor.resource-sample.v1"
+    if schema not in {
+        "mncs.system-monitor.snapshot.v1",
+        "mncs.system-monitor.resource-sample.v1",
+    }:
         return unknown("unexpected-monitor-snapshot-schema")
     observed_at = document.get("observed_at")
     if not isinstance(observed_at, int) or isinstance(observed_at, bool) or observed_at < 0:
@@ -141,6 +146,9 @@ def evaluate_resource_headroom(
         return unknown("monitor-observation-stale-or-in-future")
 
     host = document.get("host")
+    if (resource_sample and isinstance(host, dict)
+            and host.get("memory_available_status") != "observed"):
+        return unknown("host-memory-availability-not-observed")
     available = host.get("memory_available_bytes") if isinstance(host, dict) else None
     if not isinstance(available, int) or isinstance(available, bool) or available < 0:
         return unknown("host-memory-availability-unavailable")
