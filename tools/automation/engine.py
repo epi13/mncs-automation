@@ -400,8 +400,10 @@ def _tick_watch(*, paths: dict[str, Path], definition: dict[str, Any],
     watch = definition["trigger"]["watch"]
     edge = EDGE_RISING if watch["edge"] == "rising" else EDGE_WHILE_TRUE
     cond, observation = _evaluate_condition(
-        definition, state, mncs, libraries)
+        definition, state, mncs, libraries, now_ms=now_ms)
     summary["condition"] = cond
+    if observation is not None:
+        summary["condition_observation"] = observation
     try:
         decision = native.evaluate_tick(
             mncs=mncs, libraries=libraries,
@@ -449,11 +451,12 @@ def _tick_watch(*, paths: dict[str, Path], definition: dict[str, Any],
                  seq=int(decision["seq"]), at_ms=now_ms,
                  new_prev=int(decision["new_prev"]),
                  trigger_kind="watch", condition_value=cond,
-                 scheduled_at_ms=now_ms)
+                 scheduled_at_ms=now_ms,
+                 condition_observation=observation)
 
 
 def _evaluate_condition(definition: dict[str, Any], state: dict[str, Any],
-                        mncs: str, libraries: list[str]
+                        mncs: str, libraries: list[str], *, now_ms: int
                         ) -> tuple[int, dict[str, Any] | None]:
     condition = definition["trigger"]["watch"]["condition"]
     if condition["kind"] == "test-verdict":
@@ -463,13 +466,26 @@ def _evaluate_condition(definition: dict[str, Any], state: dict[str, Any],
             test_identities=condition.get("test_identities") or None,
             timeout_s=condition.get("timeout_s", 300))
         return value, {"kind": "test-verdict", **evidence}
-    value, observation = conditions.evaluate_path_changed(
+    if condition["kind"] == "path-changed":
+        value, observation = conditions.evaluate_path_changed(
+            path=condition["path"],
+            last_observed=state.get("last_observed"),
+            allowed_roots=[])
+        if observation is None:
+            return value, {"kind": "path-changed", "unreadable": True}
+        return value, {"kind": "path-changed", **observation}
+    return conditions.evaluate_resource_headroom(
         path=condition["path"],
-        last_observed=state.get("last_observed"),
-        allowed_roots=[])
-    if observation is None:
-        return value, {"kind": "path-changed", "unreadable": True}
-    return value, {"kind": "path-changed", **observation}
+        measurement_execution=condition["measurement_execution"],
+        measurement_subject_identity=condition[
+            "measurement_subject_identity"],
+        intent_identity=condition["intent_identity"],
+        requested_memory_bytes=condition["requested_memory_bytes"],
+        measurement_scale_percent=condition["measurement_scale_percent"],
+        minimum_host_headroom_bytes=condition[
+            "minimum_host_headroom_bytes"],
+        max_age_ms=condition["max_age_ms"],
+        now_ms=now_ms)
 
 
 def _fire(*, paths: dict[str, Path], definition: dict[str, Any],
@@ -477,7 +493,9 @@ def _fire(*, paths: dict[str, Path], definition: dict[str, Any],
           execute: bool, libraries: list[str], summary: dict[str, Any],
           seq: int, at_ms: int, new_prev: int, trigger_kind: str,
           condition_value: int | None,
-          scheduled_at_ms: int) -> dict[str, Any]:
+          scheduled_at_ms: int,
+          condition_observation: dict[str, Any] | None = None
+          ) -> dict[str, Any]:
     aid = automation_id(definition["name"])
     occ = occurrence_id(aid, definition["revision"], seq)
     # Replay safety: an occurrence identity fires at most once ever.
@@ -521,7 +539,8 @@ def _fire(*, paths: dict[str, Path], definition: dict[str, Any],
         "reason": 0, "reason_name": "due-fire",
         "target": {"kind": definition["target"]["kind"]},
         "invocation_id": invocation if execute else None,
-        "outcome": outcome, "condition_value": condition_value},
+        "outcome": outcome, "condition_value": condition_value,
+        "condition_observation": condition_observation},
         definition["history_bound"])
     state["prev_seq"] = new_prev
     state["last_at_ms"] = at_ms
@@ -540,6 +559,8 @@ def _fire(*, paths: dict[str, Path], definition: dict[str, Any],
     summary["occurrence_id"] = occ
     summary["invocation_id"] = invocation if execute else None
     summary["outcome"] = outcome
+    if condition_observation is not None:
+        summary["condition_observation"] = condition_observation
     return summary
 
 

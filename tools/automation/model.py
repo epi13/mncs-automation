@@ -109,6 +109,48 @@ def validate_condition(condition: Any) -> dict[str, Any]:
                  "unknown condition field")
         return {"kind": kind, "program": program, "libraries": libraries,
                 "test_identities": identities, "timeout_s": timeout}
+    if kind == "resource-headroom":
+        path = condition.get("path")
+        _require(isinstance(path, str) and path, "path required")
+        measurement_execution = condition.get("measurement_execution")
+        _require(isinstance(measurement_execution, str)
+                 and 1 <= len(measurement_execution) <= 128,
+                 "measurement_execution must be a bounded identity")
+        intent_identity = condition.get("intent_identity")
+        _require(isinstance(intent_identity, str)
+                 and 1 <= len(intent_identity) <= 128,
+                 "intent_identity must be a bounded identity")
+        subject_identity = condition.get("measurement_subject_identity")
+        _require(isinstance(subject_identity, str)
+                 and re.fullmatch(r"[0-9a-f]{64}", subject_identity) is not None,
+                 "measurement_subject_identity must be a lowercase SHA-256")
+        requested = _ms(condition.get("requested_memory_bytes"),
+                        "requested_memory_bytes", minimum=1)
+        scale = _ms(condition.get("measurement_scale_percent"),
+                    "measurement_scale_percent", minimum=100)
+        _require(scale <= 500, "measurement_scale_percent must be 100..500")
+        reserve = _ms(condition.get("minimum_host_headroom_bytes", 0),
+                      "minimum_host_headroom_bytes")
+        max_age = _ms(condition.get("max_age_ms"), "max_age_ms", minimum=1_000)
+        _require(max_age <= 2_592_000_000,
+                 "max_age_ms must not exceed 30 days")
+        _require(set(condition) <= {
+            "kind", "path", "measurement_execution",
+            "measurement_subject_identity", "intent_identity",
+            "requested_memory_bytes", "measurement_scale_percent",
+            "minimum_host_headroom_bytes", "max_age_ms",
+        }, "unknown resource-headroom condition field")
+        return {
+            "kind": kind,
+            "path": path,
+            "measurement_execution": measurement_execution,
+            "measurement_subject_identity": subject_identity,
+            "intent_identity": intent_identity,
+            "requested_memory_bytes": requested,
+            "measurement_scale_percent": scale,
+            "minimum_host_headroom_bytes": reserve,
+            "max_age_ms": max_age,
+        }
     path = condition.get("path")
     _require(isinstance(path, str) and path, "path required")
     _require(set(condition) <= {"kind", "path"}, "unknown condition field")

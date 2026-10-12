@@ -70,7 +70,7 @@ SCHEDULE_KINDS = ("one-shot", "interval", "daily-utc", "daily-local")
 MISFIRE_POLICIES = ("fire-now", "skip", "catch-up", "mark-missed")
 LIFECYCLES = ("active", "paused", "completed", "expired", "invalid", "blocked")
 EDGES = ("rising", "while-true")
-CONDITION_KINDS = ("test-verdict", "path-changed")
+CONDITION_KINDS = ("test-verdict", "path-changed", "resource-headroom")
 TARGET_KINDS = ("mncs-test", "mncs-call", "doctor",
                 "environment-reconcile")
 

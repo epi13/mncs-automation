@@ -157,6 +157,29 @@ class DefinitionTests(unittest.TestCase):
             with self.assertRaises(DefinitionError, msg=str(mutate)):
                 model.validate_definition(document)
 
+    def test_resource_headroom_requires_exact_bounded_identities(self) -> None:
+        base = {
+            "kind": "resource-headroom",
+            "path": "/tmp/monitor.json",
+            "measurement_execution": "receipt-compiler-previous",
+            "measurement_subject_identity": "a" * 64,
+            "intent_identity": "compiler-intent-next",
+            "requested_memory_bytes": 4096,
+            "measurement_scale_percent": 125,
+            "minimum_host_headroom_bytes": 1024,
+            "max_age_ms": 60_000,
+        }
+        clean = model.validate_condition(base)
+        self.assertEqual(clean["measurement_scale_percent"], 125)
+        with self.assertRaises(DefinitionError):
+            model.validate_condition({**base,
+                "measurement_subject_identity": "A" * 64})
+        with self.assertRaises(DefinitionError):
+            model.validate_condition({**base,
+                "measurement_scale_percent": 99})
+        with self.assertRaises(DefinitionError):
+            model.validate_condition({**base, "unowned_policy": True})
+
     def test_daily_local_needs_real_timezone(self) -> None:
         with self.assertRaises(DefinitionError):
             model.validate_definition({
@@ -436,6 +459,124 @@ class WatchTests(EngineCase):
                   if item["name"] == "verdict-f"][0]
         self.assertEqual(second["decision"], "wait")
         self.assertEqual(second["reason_name"], "cond-false")
+
+    @need_mncs
+    def test_resource_headroom_defers_then_fires_with_retained_measurement(self) -> None:
+        monitor = self.tmp / "monitor.json"
+        execution = "forge-receipt-compiler-selftest-previous"
+        subject = "a" * 64
+        condition = {
+            "kind": "resource-headroom",
+            "path": str(monitor),
+            "measurement_execution": execution,
+            "measurement_subject_identity": subject,
+            "intent_identity": "compiler-intent-followup-closure",
+            "requested_memory_bytes": 3500,
+            "measurement_scale_percent": 125,
+            "minimum_host_headroom_bytes": 256,
+            "max_age_ms": 60_000,
+        }
+
+        def write_projection(observed_at: int, available: int) -> None:
+            monitor.write_text(json.dumps({
+                "schema": "mncs.system-monitor.snapshot.v1",
+                "observed_at": observed_at,
+                "host": {"memory_available_bytes": available},
+                "execution_records": {
+                    "schema": "mncs.system-monitor.execution-records.v1",
+                    "records": [{
+                        "execution": execution,
+                        "source": "forge_receipt",
+                        "subject_record_id": "compiler-selftest-previous",
+                        "subject_identity": subject,
+                        "resource_envelope": {
+                            "declared": True,
+                            "memory_max_bytes": 4096,
+                        },
+                        "resource_observations": {
+                            "cgroup_memory_peak_bytes": 3000,
+                        },
+                    }],
+                },
+            }), encoding="utf-8")
+
+        write_projection(10_000, 4_000)
+        aid = self.define({
+            "schema_version": codes.DEFINITION_SCHEMA,
+            "name": "resource-feedback",
+            "trigger": {"kind": "watch", "watch": {
+                "cadence_ms": 1_000, "edge": "rising",
+                "condition": condition,
+            }},
+            "target": self.ping_target(),
+            "granted_capabilities": ["call:execute"],
+        })
+
+        deferred = self.tick(10_000)["evaluated"][0]
+        self.assertEqual(deferred["decision"], "wait")
+        self.assertEqual(deferred["condition_observation"]["status"], "defer")
+        self.assertEqual(deferred["condition_observation"]["required_memory_bytes"], 3750)
+
+        write_projection(15_000, 8_192)
+        admitted = self.tick(15_000)["evaluated"][0]
+        self.assertEqual(admitted["decision"], "fired")
+        occurrence = self.occurrences(aid)[-1]
+        evidence = occurrence["condition_observation"]
+        self.assertEqual(evidence["measurement_execution"], execution)
+        self.assertEqual(evidence["measurement_subject_identity"], subject)
+        self.assertEqual(evidence["measured_peak_bytes"], 3000)
+        self.assertEqual(evidence["scaled_measurement_bytes"], 3750)
+        self.assertEqual(evidence["intent_identity"], "compiler-intent-followup-closure")
+        self.assertEqual(evidence["host_available_bytes"], 8192)
+
+    def test_resource_headroom_preserves_unknown_for_stale_or_wrong_identity(self) -> None:
+        from automation.conditions import evaluate_resource_headroom
+
+        path = self.tmp / "monitor.json"
+        path.write_text(json.dumps({
+            "schema": "mncs.system-monitor.snapshot.v1",
+            "observed_at": 1_000,
+            "host": {"memory_available_bytes": 8192},
+            "execution_records": {
+                "schema": "mncs.system-monitor.execution-records.v1",
+                "records": [{
+                    "execution": "receipt-one",
+                    "source": "forge_receipt",
+                    "subject_record_id": "compiler-task",
+                    "subject_identity": "b" * 64,
+                    "resource_envelope": {"declared": True,
+                                          "memory_max_bytes": 4096},
+                    "resource_observations": {
+                        "cgroup_memory_peak_bytes": 3000,
+                    },
+                }],
+            },
+        }), encoding="utf-8")
+        arguments = {
+            "path": str(path),
+            "measurement_execution": "receipt-one",
+            "measurement_subject_identity": "a" * 64,
+            "intent_identity": "compiler-intent-next",
+            "requested_memory_bytes": 2000,
+            "measurement_scale_percent": 125,
+            "minimum_host_headroom_bytes": 0,
+            "max_age_ms": 10_000,
+        }
+        wrong_arguments = {
+            **arguments,
+            "measurement_subject_identity": "b" * 64,
+        }
+        wrong_subject, wrong_evidence = evaluate_resource_headroom(
+            **arguments, now_ms=2_000)
+        self.assertEqual(wrong_subject, codes.COND_UNKNOWN)
+        self.assertEqual(wrong_evidence["reason"],
+                         "measurement-subject-identity-mismatch")
+
+        stale, stale_evidence = evaluate_resource_headroom(
+            **wrong_arguments, now_ms=20_000)
+        self.assertEqual(stale, codes.COND_UNKNOWN)
+        self.assertEqual(stale_evidence["reason"],
+                         "monitor-observation-stale-or-in-future")
 
 
 class DryRunPurityTests(EngineCase):

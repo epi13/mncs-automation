@@ -38,7 +38,30 @@ required; resolved host-side to Pinned UTC + local-day serial).
 Watches: `{cadence_ms>=1000, edge: rising|while-true, condition}` with
 conditions `test-verdict {program, libraries, test_identities,
 timeout_s}` and `path-changed {path}` (first observation bootstraps the
-baseline and does not fire).
+baseline and does not fire). `resource-headroom` consumes a fresh
+`mncs.system-monitor.snapshot.v1` projection with its
+`mncs.system-monitor.execution-records.v1` section. It requires an exact
+Forge execution identity and subject SHA-256, a declared memory envelope,
+and a cgroup memory peak. It raises the next compiler estimate to at least
+the measured peak scaled by `measurement_scale_percent` (100..500), then
+fires only when that requirement plus `minimum_host_headroom_bytes` fits
+the observed host availability. Stale, ambiguous, mismatched, or incomplete
+measurements are UNKNOWN. The full observation is retained with a fired
+occurrence so the scheduling decision can be explained.
+
+```json
+{
+  "kind": "resource-headroom",
+  "path": "/workspace/.mncs/monitor-projection.json",
+  "measurement_execution": "forge-receipt-identity",
+  "measurement_subject_identity": "<64 lowercase hex characters>",
+  "intent_identity": "compiler-dependency-closure-identity",
+  "requested_memory_bytes": 16777216,
+  "measurement_scale_percent": 125,
+  "minimum_host_headroom_bytes": 67108864,
+  "max_age_ms": 60000
+}
+```
 
 Targets: `mncs-test`, `mncs-call {program, libraries, module, function,
 args (HostExecutionValue wire), grants}`, `doctor {root, changed_paths,
@@ -72,7 +95,7 @@ scheduled_at_ms|observed, evaluated_ms, decision:
 fired|missed|skipped|suppressed|blocked|terminal|unknown,
 reason, reason_name, target:{kind}, invocation_id|null,
 outcome: null|{status: ok|failed|unknown, ...execution identities},
-condition_value}`.
+condition_value, condition_observation}.
 
 ## CLI
 
