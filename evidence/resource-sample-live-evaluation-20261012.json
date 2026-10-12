@@ -1,0 +1,69 @@
+{
+  "schema_version": "mncs-automation.resource-sample-live-evaluation-evidence/1",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "recorded_at": "2026-10-12T19:36:46.127Z",
+  "owner": "mncs-automation",
+  "session_id": "ses_7226fbcfe65820f7",
+  "scope": "condition-input-only",
+  "source": {
+    "automation_revision": "eaf0c10d48f5c8545cd52339577f4dae03bcf0aa",
+    "files": [
+      {
+        "path": "tools/automation/conditions.py",
+        "sha256": "9360c38e426d25dcf86e7c98899efb5dadc10ea9a62966f45f07c420c899d147"
+      },
+      {
+        "path": "tests/test_automation.py",
+        "sha256": "bfa447c0a55746a5c26297ade4530be6d11519c9f65d7f2905565ebfd3f84b42"
+      }
+    ]
+  },
+  "input": {
+    "source_owner": "mncs-system-monitor",
+    "retrieval": "Environment artifact-read in a fresh protected project process through the authorized Store transport",
+    "protected_process_resolved_session": "ses_7226fbcfe65820f7",
+    "direct_canonical_store_filesystem_access": false,
+    "store_ref": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:95949219f13f32fa4d817bffe0b35e4d109937250a0d526a9bb72ddb70567aac",
+    "sha256": "b5adbcb8887af6ea859fd270268d4a91e4ea76d0d08cda4f17353a989d23273e",
+    "byte_length": 459,
+    "schema": "mncs.system-monitor.resource-sample.v1",
+    "observed_at_unix_ms": 1791830763920,
+    "observed_at_utc": "2026-10-12T18:46:03.920Z",
+    "execution_records_present": false
+  },
+  "evaluations": [
+    {
+      "clock": "actual wall clock at evaluation",
+      "max_age_ms": 60000,
+      "result": "UNKNOWN",
+      "reason": "monitor-observation-stale-or-in-future",
+      "sample_age_at_evaluation": "approximately 47 minutes"
+    },
+    {
+      "clock": "controlled evaluation at observed_at_unix_ms + 1000",
+      "result": "UNKNOWN",
+      "reason": "forge-execution-records-unavailable"
+    }
+  ],
+  "validation": {
+    "focused_pytest": {
+      "command": "python3 -m pytest -q tests/test_automation.py -k 'resource_headroom'",
+      "status": "pass",
+      "passed": 5,
+      "deselected": 36,
+      "elapsed_seconds": 12.04
+    },
+    "source_hashes_checked": true,
+    "condition_reasons_confirmed_in_source": true,
+    "report_json_validation": "pending"
+  },
+  "decision": {
+    "finding": "Automation preserves UNKNOWN for a real System Monitor sample when it is stale and when the exact Forge execution-record input is absent.",
+    "evaluate_tick_invoked": false,
+    "forge_admission_invoked": false,
+    "compiler_execution_invoked": false,
+    "scheduling_decision_produced": false,
+    "subsequent_compiler_admission_produced": false
+  },
+  "readiness": "This records an actual canonical Store input evaluated against Automation condition logic. The end-to-end Compiler-to-Forge-to-Monitor-to-Store-to-Automation scheduling slice remains unproven."
+}
