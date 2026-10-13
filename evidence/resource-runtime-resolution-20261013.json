@@ -1,0 +1,90 @@
+{
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "change": "Resolve the Language compiler and default libraries from the workspace project contract when runtime overrides are absent.",
+  "native_tick_probe": {
+    "request": {
+      "anchor_ms": 0,
+      "first": true,
+      "now_ms": 2500,
+      "period_ms": 1000,
+      "previous_sequence": 0,
+      "schedule_kind": "interval"
+    },
+    "result": {
+      "at_ms": 0,
+      "fire": false,
+      "missed_from": 1,
+      "missed_to": 0,
+      "new_prev": 3,
+      "reason": 1,
+      "seq": 0,
+      "wakeup_ms": 3000
+    },
+    "status": "passed through the Automation production resolver and Language native call bridge"
+  },
+  "owner": "mncs-automation",
+  "protected_execution": {
+    "backend": "bwrap",
+    "compiler_sha256": "88676fb9d5e8c828e75774993402a179bc7ec353bca5f647b10857637f28d683",
+    "compiler_source_build_linkage": "not attested; repository revision and executable digest are recorded independently",
+    "default_libraries": [
+      "/workspace/mncs-test/native",
+      "/workspace/mncs-language/library"
+    ],
+    "language_repository_head": "12b29d6482599465698b78c87a21c63d3adeceb6",
+    "project": "mncs-automation",
+    "resolved_compiler": "/workspace/mncs-language/target/release/mncs",
+    "runtime_overrides_cleared": [
+      "MNCS_BIN",
+      "MNCS_BINARY",
+      "MNCS_LANGUAGE_ROOT",
+      "MNCS_TEST_NATIVE"
+    ]
+  },
+  "readiness": "The project sandbox now resolves the declared Language CLI and libraries without environment overrides. The full test module did not finish within the Control runner limit; the focused integration set passed.",
+  "recorded_at": "2026-10-13T00:29:46Z",
+  "resource_feedback_slice": {
+    "automation_resource_condition_and_native_evaluator": true,
+    "forge_admission": false,
+    "readiness": "Automation runtime resolution and test-owned resource-condition scheduling are proven in project bwrap. The live Forge-to-Monitor-to-Store-to-Automation resource loop remains unproven.",
+    "real_forge_receipt": false,
+    "resource_condition_test": "test_resource_headroom_defers_then_fires_with_retained_measurement",
+    "subsequent_compiler_admission": false,
+    "test_decision_uses_measured_peak_and_host_headroom": true,
+    "test_receipt_input": "synthetic fixture using the Forge receipt/System Monitor schema"
+  },
+  "schema_version": "mncs.automation.resource-runtime-resolution/1",
+  "session_id": "ses_7226fbcfe65820f7",
+  "source": {
+    "base_revision": "8c908d3a3498146a706575b0e52334faf261d14e",
+    "files": [
+      {
+        "path": "tools/automation/native.py",
+        "sha256": "0156ee6a43610859ab3fe6ddf109913e582ee3894abe1fc8b799ab41a95dd4ec"
+      },
+      {
+        "path": "tests/test_automation.py",
+        "sha256": "a503e4a2d2ae2f1253c751764ce3c58c7cd274f413a1b68a71859b2e8b324855"
+      }
+    ]
+  },
+  "validation": {
+    "diff_check": "passed",
+    "focused_command": "env -u MNCS_BIN -u MNCS_BINARY -u MNCS_LANGUAGE_ROOT -u MNCS_TEST_NATIVE PYTHONPATH=tools python3 -m pytest -q tests/test_automation.py -k 'workspace_toolchain or default_runtime or resource_headroom'",
+    "focused_result": {
+      "deselected": 36,
+      "passed": 7,
+      "sandbox_backend": "bwrap",
+      "status": "passed"
+    },
+    "full_module_command": "env -u MNCS_BIN -u MNCS_BINARY -u MNCS_LANGUAGE_ROOT -u MNCS_TEST_NATIVE PYTHONPATH=tools python3 -m pytest -q tests/test_automation.py",
+    "full_module_result": {
+      "exit_code": -15,
+      "progress_markers_before_termination": 37,
+      "reported_failures": 0,
+      "sandbox_job_id": "term-72e464178ec3af6050819a85",
+      "status": "timed_out_incomplete",
+      "timeout_seconds": 300
+    }
+  }
+}

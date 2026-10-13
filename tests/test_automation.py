@@ -116,6 +116,56 @@ class EngineCase(unittest.TestCase):
         return base
 
 
+class NativeRuntimeResolutionTests(unittest.TestCase):
+    def test_workspace_toolchain_and_libraries_are_selected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="automation-toolchain-") as raw:
+            workspace = Path(raw)
+            automation = workspace / "mncs-automation"
+            automation.mkdir()
+            language = workspace / "mncs-language"
+            release = language / "target" / "release" / "mncs"
+            debug = language / "target" / "debug" / "mncs"
+            release.parent.mkdir(parents=True)
+            debug.parent.mkdir(parents=True)
+            release.touch()
+            debug.touch()
+            language_library = language / "library"
+            language_library.mkdir()
+            test_native = workspace / "mncs-test" / "native"
+            test_native.mkdir(parents=True)
+
+            with patch.object(native, "REPO_ROOT", automation), \
+                    patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(native.find_mncs(), str(release))
+                self.assertEqual(native.default_libraries(),
+                                 [str(test_native), str(language_library)])
+                release.unlink()
+                self.assertEqual(native.find_mncs(), str(debug))
+
+    @need_mncs
+    def test_default_runtime_produces_native_tick_decision(self) -> None:
+        decision = native.evaluate_tick(
+            mncs=native.find_mncs(),
+            sched_kind=codes.SCHED_INTERVAL,
+            p1=0,
+            p2=1_000,
+            trig_kind=codes.TRIG_SCHEDULE,
+            edge=codes.EDGE_RISING,
+            prev_cond=codes.COND_FALSE,
+            cond=codes.COND_FALSE,
+            prev_seq=0,
+            last_at_ms=0,
+            now_ms=2_500,
+            misfire=codes.MISFIRE_FIRE_NOW,
+            bound=3,
+            first=1,
+        )
+        self.assertFalse(decision["fire"])
+        self.assertEqual(decision["reason"], codes.REASON_WAITING)
+        self.assertEqual(decision["new_prev"], 3)
+        self.assertEqual(decision["wakeup_ms"], 3_000)
+
+
 class DefinitionTests(unittest.TestCase):
     def test_minimal_valid_definition(self) -> None:
         clean = model.validate_definition({
@@ -531,13 +581,18 @@ class WatchTests(EngineCase):
             "granted_capabilities": ["call:execute"],
         })
 
-        deferred = self.tick(10_000)["evaluated"][0]
+        def production_tick(now_ms: int) -> dict[str, Any]:
+            return engine.tick(
+                state_dir=self.state_dir, mncs=native.find_mncs(),
+                now_ms=now_ms, policy=open_policy())
+
+        deferred = production_tick(10_000)["evaluated"][0]
         self.assertEqual(deferred["decision"], "wait")
         self.assertEqual(deferred["condition_observation"]["status"], "defer")
         self.assertEqual(deferred["condition_observation"]["required_memory_bytes"], 3750)
 
         write_projection(15_000, 8_192)
-        admitted = self.tick(15_000)["evaluated"][0]
+        admitted = production_tick(15_000)["evaluated"][0]
         self.assertEqual(admitted["decision"], "fired")
         occurrence = self.occurrences(aid)[-1]
         evidence = occurrence["condition_observation"]

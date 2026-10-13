@@ -38,23 +38,27 @@ def find_mncs(explicit: str | None = None) -> str:
     if env:
         return env
     root = os.environ.get("MNCS_LANGUAGE_ROOT")
-    if root:
-        candidate = Path(root) / "target" / "debug" / "mncs"
+    language_root = (Path(root) if root else
+                     REPO_ROOT.parent / "mncs-language")
+    for profile in ("release", "debug"):
+        candidate = language_root / "target" / profile / "mncs"
         if candidate.is_file():
             return str(candidate)
     return "mncs"
 
 
 def default_libraries(extra: list[str] | None = None) -> list[str]:
-    language_root = os.environ.get("MNCS_LANGUAGE_ROOT")
     libraries: list[str] = []
-    if language_root:
-        candidate = Path(language_root) / "library"
-        if candidate.is_dir():
-            libraries.append(str(candidate))
     test_native = os.environ.get("MNCS_TEST_NATIVE")
-    if test_native:
-        libraries.append(test_native)
+    test_native_root = (Path(test_native) if test_native else
+                        REPO_ROOT.parent / "mncs-test" / "native")
+    if test_native_root.is_dir():
+        libraries.append(str(test_native_root))
+    language_root = os.environ.get("MNCS_LANGUAGE_ROOT")
+    language_library = (Path(language_root) / "library" if language_root else
+                        REPO_ROOT.parent / "mncs-language" / "library")
+    if language_library.is_dir():
+        libraries.append(str(language_library))
     for item in extra or []:
         if item not in libraries:
             libraries.append(item)
