@@ -1,0 +1,111 @@
+{
+  "schema_version": "mncs-automation.resource-headroom-native-evaluation/1",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "identity": "ev_automation_resource_headroom_native_evaluation_20261013",
+  "owner": "mncs-automation",
+  "session_id": "ses_7226fbcfe65820f7",
+  "recorded_at": "2026-10-13T03:44:15Z",
+  "source": {
+    "repository": "mncs-automation",
+    "base_revision": "a019bc9ba39852c59bc1b0c8115ac65520af58ad",
+    "implementation_revision": "25f07e19dc31bdbf4c83f2572887fff803f2a5a2",
+    "files": [
+      {
+        "path": "native/mncs/automation/evaluation.mncs",
+        "sha256": "220982e7481cf89bcc03dd6435e24fc06c1b034b65c4b8e47a8e2f66e98cc302"
+      },
+      {
+        "path": "tools/automation/conditions.py",
+        "sha256": "1c93ea24f7c527f50db68da745c7c6cb8ff0dab80d70047ca6603622d8cda559"
+      },
+      {
+        "path": "tools/automation/engine.py",
+        "sha256": "82ba71990842333814932c88de2015c15d40021ee5cc587cf974d6e9678909b6"
+      },
+      {
+        "path": "tools/automation/native.py",
+        "sha256": "45f82f9d7418cd555ba90f1c333f847211f0fcdfdd693df9312880b3688ef467"
+      }
+    ]
+  },
+  "change": {
+    "owner_boundary": "Automation owns resource-headroom scheduling semantics; the host bridge retains bounded file I/O and exact Monitor/Forge provenance correlation.",
+    "native_decision": "The native evaluator now owns observation freshness, scaled peak arithmetic, Forge envelope fit, host reserve/headroom comparison, and TRUE/FALSE/UNKNOWN output.",
+    "overflow_behavior": "scaled peak and required total saturate at signed-64 maximum; reserve comparison remains correct without overflowing subtraction.",
+    "recorded_condition": "Automation retains the complete measured inputs and native decision in its occurrence condition observation."
+  },
+  "protected_tests": {
+    "backend": "bwrap",
+    "project": "mncs-automation",
+    "network": false,
+    "compiler": {
+      "path": "/workspace/mncs-language/target/release/mncs",
+      "version": "mncs 0.1.0",
+      "sha256": "88676fb9d5e8c828e75774993402a179bc7ec353bca5f647b10857637f28d683",
+      "language_repository_head_observed": "7e8f56d3c84b6b1260a99ab403b2a51168d13871",
+      "source_build_linkage": "not attested; revision and executable digest are recorded independently"
+    },
+    "native_evaluation_suite": {
+      "job_id": "term-65c034cd0b928d25ff081bee",
+      "command": "mncs test native/mncs/automation/evaluation.mncs --library /workspace/mncs-language/library --library /workspace/mncs-test/native",
+      "test_blocks": 17,
+      "verdict": "PASS",
+      "exit_code": 0,
+      "duration_seconds": 2.087
+    },
+    "focused_resource_tests": {
+      "job_id": "term-65c034cd0b928d25ff081bee",
+      "command": "python3 -m pytest -q tests/test_automation.py -k resource_headroom",
+      "passed": 5,
+      "deselected": 38,
+      "status": "PASS",
+      "duration_seconds": 5.4
+    },
+    "full_automation_suite": {
+      "job_id": "term-e5c819c81f9986eea5a63a7a",
+      "command": "python3 -m unittest tests.test_automation",
+      "passed": 43,
+      "failed": 0,
+      "status": "PASS",
+      "duration_seconds": 66.051
+    },
+    "static_checks": {
+      "python_compile": "PASS",
+      "git_diff_check": "PASS"
+    }
+  },
+  "resource_feedback_slice": {
+    "automation_native_resource_decision": true,
+    "synthetic_projection_test_exercises_production_tick": true,
+    "real_forge_execution_receipt_available": false,
+    "real_compiler_execution": false,
+    "forge_admission": false,
+    "canonical_store_resource_measurement_with_receipt": false,
+    "subsequent_real_compiler_admission": false,
+    "forge_receipt_inventory": {
+      "observed_at": "2026-10-13T03:44:15Z",
+      "source": "mncs_forge.execution_receipts_list",
+      "count": 0
+    },
+    "verdict": "The native decision path is tested with synthetic Forge/System Monitor facts. The required Compiler-to-Forge-to-System-Monitor-to-Store-to-Automation execution has not been demonstrated."
+  },
+  "ownership": {
+    "automation_claim": {
+      "claim_id": "claim:mncs-automation",
+      "owner_session_id": "ses_7226fbcfe65820f7",
+      "consumer_id": "local-agent",
+      "expires_at": "2026-10-13T05:08:34+00:00"
+    },
+    "system_monitor_claim": {
+      "claim_id": "claim:mncs-system-monitor",
+      "owner_session_id": "ses_7226fbcfe65820f7",
+      "consumer_id": "local-agent",
+      "expires_at": "2026-10-13T05:08:49+00:00"
+    },
+    "compiler_and_forge_claims": "Remain held by their prior owners; source and execution operations await the promised Environment handoffs."
+  },
+  "stage_claims": {
+    "stage1_proven": false,
+    "stage2_proven": false
+  }
+}
