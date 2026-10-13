@@ -1,0 +1,118 @@
+{
+  "schema_version": "mncs-automation.resource-feedback-environment-vertical/1",
+  "evidence_identity": "ev_automation_resource_feedback_environment_vertical_20261013",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-automation",
+  "recorded_at": "2026-10-13T08:16:07Z",
+  "status": "partial",
+  "source_revisions": {
+    "mncs-automation": "1b92080c02f4fad883f9e2f8557506eb19918fa6",
+    "mncs-control-mcp": "b2f5dfb2f000496b50f776f91810676a7d972e3b",
+    "mncs-environment": "0926cfce1c4ed9d52b58cb6e3270a47c48c89198",
+    "mncs-system-monitor": "038d5b05c329d054cf31b62715512aa67ffe3e2a"
+  },
+  "continuation": {
+    "selection": "authenticated-project-environment-definition",
+    "selected_session_id": "ses_7226fbcfe65820f7",
+    "selected_in_same_authenticated_project_grant_as_invocation": true,
+    "unselected_same_campaign_context_preserved": "ses_b4b2d283542220b0"
+  },
+  "protected_execution": {
+    "sandbox_backend": "bwrap",
+    "project": "mncs-environment",
+    "canonical_store_transport": "authenticated mncs-control-environment-rpc",
+    "agent_direct_store_path_write": false
+  },
+  "monitor_input": {
+    "capability": "mncs-system-monitor:system-resource-sample",
+    "binding_id": "cap_9a39cbc2cdf18f11",
+    "store_reference": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:55a163fac1f58fa87153bcd7dbad20a35452d11d5bcb2145926b37ffa3e2f4d5",
+    "path": "system-resource-sample.json",
+    "byte_count": 460,
+    "sha256": "242860b9bb9bdf66b58cdb0c91c5a9f3251baca2684c646437bd8aa65ab4ef34",
+    "observation": {
+      "host_memory_available_bytes": 8849416192,
+      "memory_status": "observed",
+      "execution_records_present": false
+    }
+  },
+  "automation_decision": {
+    "capability": "mncs-automation:automation-resource-headroom-evaluation",
+    "binding_id": "cap_5065656331fc735d",
+    "store_reference": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:943f0e772d55af62c7904aec1bc96db9b0c36598b7ff2ec7335f7ac05cf2c865",
+    "path": "resource-headroom-decision.json",
+    "byte_count": 832,
+    "sha256": "ce4d5792265d03ffd701221ba9c7cd74e1fe9110fc5013cd13c7cdaf888b8daa",
+    "input_store_reference": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:55a163fac1f58fa87153bcd7dbad20a35452d11d5bcb2145926b37ffa3e2f4d5",
+    "condition": "unknown",
+    "reason": "forge-execution-records-unavailable",
+    "intent_identity": "compiler-resource-loop-next",
+    "measurement_execution": "pending-forge-execution",
+    "measurement_subject_identity": "pending-forge-subject",
+    "requested_memory_bytes": 1073741824,
+    "measurement_scale_percent": 125,
+    "minimum_host_headroom_bytes": 268435456,
+    "max_age_ms": 60000,
+    "placeholder_measurement_identity_used_only_for_fail_closed_probe": true
+  },
+  "fresh_process_readback": {
+    "method": "Environment artifact-read through authenticated project continuation",
+    "same_store_reference": true,
+    "sha256_verified": true,
+    "byte_count_verified": 832,
+    "condition": "unknown",
+    "reason": "forge-execution-records-unavailable"
+  },
+  "validation": {
+    "automation_focused_tests": {
+      "command": "python3 -m unittest tests.test_automation.EnvironmentProviderInputTests tests.test_automation.WatchTests.test_resource_headroom_consumes_privacy_minimized_resource_sample",
+      "result": "pass",
+      "tests": 4,
+      "sandbox_backend": "bwrap"
+    },
+    "control_focused_tests": {
+      "result": "pass",
+      "tests": [
+        "test_project_rpc_exposes_only_typed_resource_headroom_evaluation",
+        "test_project_rpc_exposes_session_authorized_read_operations_and_reports_unknown_operations",
+        "test_artifact_read_is_bound_to_environment_selected_project_session"
+      ],
+      "sandbox_backend": "bwrap"
+    },
+    "static_checks": [
+      "manifest JSON parse passed",
+      "Python compileall passed",
+      "CLI help passed",
+      "git diff --check passed"
+    ],
+    "automation_full_suite": {
+      "result": "unknown",
+      "detail": "MNCS Control terminal request timed out before returning a test summary; the focused tests above completed successfully."
+    }
+  },
+  "readiness": {
+    "status": "partial",
+    "canonical_monitor_artifact_input": true,
+    "canonical_automation_decision_publication": true,
+    "fresh_process_decision_readback": true,
+    "matching_forge_receipt": false,
+    "compiler_execution_performed": false,
+    "subsequent_admission_influenced_by_measurement": false,
+    "reason": "The live privacy-minimized Monitor sample contains host metrics but no exact Forge execution record or subject identity. Automation correctly returned UNKNOWN and did not make a scheduling decision."
+  },
+  "ownership": {
+    "automation_claim": "clm_052e93b760382ca7 held by this session",
+    "control_claim": "clm_073558a981cdbfce held by this session",
+    "system_monitor_claim": "clm_6cdf93adda018908 held by this session",
+    "compiler_claim": "clm_5871ad9917e5210d held by ses_d2537acde8b8a875; awaiting Environment handoff",
+    "forge_claim": "clm_16b820b3293d873b held by ses_95c3aa35b8544042; awaiting Environment handoff",
+    "unresolved_duplicate_context": "ses_b4b2d283542220b0 remains unselected"
+  },
+  "next": [
+    "Receive and accept the user's promised Environment handoffs for Compiler and Forge before testing or changing either repository.",
+    "After authorized Forge continuity is present, capture one exact compiler execution receipt and bind it into a System Monitor resource sample.",
+    "Feed that sample and a verified compiler resource intent through the published Automation operation, then read back its canonical decision artifact in a fresh process.",
+    "Use the measured result to explain or influence a subsequent Forge admission without increasing budgets blindly."
+  ]
+}

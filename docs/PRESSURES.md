@@ -146,6 +146,15 @@ invocation workspace for canonical publication. It does not run the persistent
 tick loop or write Automation state. The operation reports UNKNOWN when the
 sample is missing or its Forge receipt identity does not match.
 
+The exact operation is now admitted through Control's project-scoped Environment
+RPC with bounded parameters and the single declared System Monitor sample input.
+Control also exposes fresh-process readback for the declared Automation decision
+file. A protected live run published and read back the decision artifact from
+canonical Store with matching reference and SHA-256. It returned UNKNOWN because
+the live sample had no Forge execution records; this proves the mediated path and
+fail-closed result, not resource-aware admission. See
+`evidence/resource-feedback-environment-vertical-20261013.json`.
+
 Before this loop can schedule compiler work, an actual Forge receipt must flow
 through System Monitor and canonical Store into a native Automation decision,
 then inform a subsequent compiler admission. The current live sample is not a
