@@ -1,0 +1,147 @@
+{
+  "schema_version": "mncs.automation.partitioned-test-evidence/1",
+  "identity": "ev_automation_partitioned_test_automation_20261013",
+  "recorded_at": "2026-10-13T01:39:15Z",
+  "owner": "mncs-automation",
+  "source": {
+    "repository": "mncs-automation",
+    "branch": "main",
+    "revision": "d4e9af7e0ffc2ab77d32903381996df203b59615",
+    "origin_main_at_test_start": "d4e9af7e0ffc2ab77d32903381996df203b59615",
+    "working_tree_clean_at_test_start": true
+  },
+  "execution": {
+    "control_backend": "bwrap",
+    "project": "mncs-automation",
+    "working_directory": "/workspace/mncs-automation",
+    "python_path": "tools",
+    "mncs_workspace_root": "/workspace",
+    "mncs_binary": "/workspace/mncs-language/target/debug/mncs",
+    "mncs_binary_sha256": "02f4da8101c3600b103da2a500b7614fa741109209176f2480660b1d401f5c74",
+    "python_bytecode_writes_disabled": true
+  },
+  "coverage": {
+    "test_file": "tests/test_automation.py",
+    "collected_test_functions": 43,
+    "passed_unique_test_functions": 43,
+    "failed_test_functions": 0,
+    "native_suite_test_functions": 1,
+    "native_suite_modules_passed": [
+      "time",
+      "schedule",
+      "trigger",
+      "evaluation",
+      "reconcile",
+      "projection"
+    ],
+    "execution_mode": "bounded pytest selections and isolated slow cases",
+    "single_invocation_status": "the earlier whole-module Control job timed out without a pytest summary; every collected test function was subsequently covered by a successful bounded run"
+  },
+  "successful_runs": [
+    {
+      "job_id": "term-b4ef1ce1252528d2cb387f10",
+      "selection": "workspace/runtime/definition/resource-headroom/contract/timezone validation group",
+      "passed": 12,
+      "deselected": 31,
+      "elapsed_seconds": 45.44,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-e48e4e029949a29d3acb16fe",
+      "selection": "test_test_verdict_true_and_false",
+      "passed": 1,
+      "deselected": 42,
+      "elapsed_seconds": 33.61,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-3f70207b76b3ec6d2c037a5c",
+      "selection": "dry-run, observe-only, recovery, restart, and changed-program state group",
+      "passed": 5,
+      "deselected": 38,
+      "elapsed_seconds": 40.60,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-e2ef4350e603369f30cb8f45",
+      "selection": "capability, policy, overlap, update, and delete state group",
+      "passed": 5,
+      "deselected": 38,
+      "elapsed_seconds": 36.57,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-8e620d05ef511184299fd2f3",
+      "selection": "generated_schedules_stay_monotonic_and_bounded",
+      "passed": 1,
+      "deselected": 42,
+      "elapsed_seconds": 182.18,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-1985d39315e10db0b3662c21",
+      "selection": "doctor and Environment reconciliation target group",
+      "passed": 4,
+      "deselected": 39,
+      "subtests_passed": 2,
+      "elapsed_seconds": 19.71,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-66ec71fc5588a6d951ea91ff",
+      "selection": "native_suites_pass",
+      "passed": 1,
+      "deselected": 42,
+      "subtests_passed": 6,
+      "elapsed_seconds": 100.24,
+      "exit_code": 0
+    },
+    {
+      "job_id": "term-b6256bb7777d90a6b76958ba",
+      "selection": "while_true_fires_every_tick",
+      "passed": 1,
+      "deselected": 42,
+      "elapsed_seconds": 22.50,
+      "exit_code": 0
+    }
+  ],
+  "bounded_batch_recovery": [
+    {
+      "job_id": "term-5c3a47e8d6572e70c70404b5",
+      "selected_test_functions": 20,
+      "outcome": "Control timeout after 120 seconds",
+      "completed_passes_before_timeout": 9,
+      "completed_test_functions_in_collection_order": [
+        "test_fires_once_then_completes_without_duplicates",
+        "test_catch_up_drains_one_per_tick",
+        "test_fire_now_records_missed_and_dedups",
+        "test_skip_policy_advances_without_firing",
+        "test_disable_never_fires_then_resumes",
+        "test_expiry_is_terminal",
+        "test_rising_edge_fires_once_per_change",
+        "test_test_verdict_true_and_false",
+        "test_unknown_condition_never_fires"
+      ],
+      "remainder_resolution": "the verdict case, persistence/recovery group, policy group, and while-true case all passed in the successful bounded runs above"
+    },
+    {
+      "job_id": "term-48997efa6517c28f99d842f4",
+      "selected_test_functions": 6,
+      "outcome": "Control timeout after 120 seconds",
+      "completed_passes_before_timeout": 5,
+      "completed_test_functions_in_collection_order": [
+        "test_daily_local_fires_on_local_days",
+        "test_daily_utc_uses_minute_of_day",
+        "test_daily_recurrence_crosses_spring_forward",
+        "test_fall_back_overlap_takes_first",
+        "test_spring_forward_gap_shifts_to_first_valid"
+      ],
+      "remainder_resolution": "the generated-schedule boundedness case passed separately in 182.18 seconds"
+    }
+  ],
+  "readiness": {
+    "automation_test_automation_py": "all 43 collected test functions have successful results across bounded runs",
+    "resource_feedback": "component scheduling tests pass; no real Compiler-through-Forge execution receipt or subsequent compiler scheduling decision was produced by this test run",
+    "compiler_succession": "Stage-1 and Stage-2 remain unproven"
+  }
+}
