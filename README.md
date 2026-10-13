@@ -41,11 +41,12 @@ boundaries: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Known gaps:
 ## Layout
 
 - `native/mncs/automation/` — `time`, `schedule`, `trigger`,
-  `evaluation` semantics with native test blocks (33 tests: 7 time,
-  8 schedule, 6 trigger, 12 evaluation).
+  `evaluation`, and resource-headroom semantics with native test blocks
+  (38 tests: 7 time, 8 schedule, 6 trigger, 17 evaluation).
 - `tools/automation/` — thin host bridge: model/store/native-call/tz/
-  conditions/targets/engine/CLI. Filesystem, clocks, tzdata, and
-  subprocess transport stay here; decisions stay native.
+  conditions/targets/engine/CLI. Filesystem, clocks, tzdata, subprocess
+  transport, and exact Monitor/Forge record correlation stay here; decisions
+  stay native.
 - `tests/test_automation.py` — deterministic suite (virtual clock,
   recovery, DST, properties, native cross-checks).
 - `tests/fixtures/` — tiny typed-call and condition programs.

@@ -11,8 +11,8 @@ Kinds (bounded on purpose; no generic rules engine):
 - path-changed: compare a file digest against the last observation;
   changed -> TRUE (and the new observation is returned for storage),
   same -> FALSE, unreadable -> UNKNOWN.
-- resource-headroom: read a fresh System Monitor projection with one exact
-  Forge receipt; insufficient known headroom -> FALSE, sufficient -> TRUE,
+- resource-headroom: correlate a fresh System Monitor projection with one
+  exact Forge receipt, then pass validated numeric facts to native Automation;
   missing or mismatched facts -> UNKNOWN.
 """
 
@@ -89,6 +89,7 @@ def evaluate_path_changed(*, path: str, last_observed: dict[str, Any] | None,
 
 def evaluate_resource_headroom(
     *,
+    mncs: str | None = None,
     path: str,
     measurement_execution: str,
     measurement_subject_identity: str,
@@ -99,14 +100,7 @@ def evaluate_resource_headroom(
     max_age_ms: int,
     now_ms: int | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    """Decide whether a compiler intent fits using Monitor and Forge facts.
-
-    This consumes the System Monitor machine projection; it does not admit work or
-    infer compiler semantics. A Forge receipt must match both its exact execution
-    identity and subject digest. The next resource requirement is the larger of the
-    compiler estimate and the scaled observed peak, so retained measurements can only
-    raise the estimate. Missing, stale, ambiguous, or incomplete inputs remain UNKNOWN.
-    """
+    """Validate Monitor/Forge provenance, then ask native Automation for the decision."""
     def unknown(reason: str) -> tuple[int, dict[str, Any]]:
         return COND_UNKNOWN, {
             "kind": "resource-headroom",
@@ -138,19 +132,38 @@ def evaluate_resource_headroom(
     }:
         return unknown("unexpected-monitor-snapshot-schema")
     observed_at = document.get("observed_at")
-    if not isinstance(observed_at, int) or isinstance(observed_at, bool) or observed_at < 0:
+    max_i64 = 2**63 - 1
+    if (not isinstance(observed_at, int) or isinstance(observed_at, bool)
+            or observed_at < 0 or observed_at > max_i64):
         return unknown("monitor-observation-time-unavailable")
-    evaluated_at = int(now_ms) if now_ms is not None else int(time.time() * 1000)
-    age_ms = evaluated_at - observed_at
-    if age_ms < 0 or age_ms > max_age_ms:
-        return unknown("monitor-observation-stale-or-in-future")
+    if (now_ms is not None
+            and (not isinstance(now_ms, int) or isinstance(now_ms, bool)
+                 or now_ms < 0 or now_ms > max_i64)):
+        return unknown("automation-evaluation-time-unavailable")
+    evaluated_at = now_ms if now_ms is not None else int(time.time() * 1000)
+    if (not isinstance(evaluated_at, int) or isinstance(evaluated_at, bool)
+            or evaluated_at < 0 or evaluated_at > max_i64):
+        return unknown("automation-evaluation-time-unavailable")
+    numeric_inputs = {
+        "max_age_ms": max_age_ms,
+        "requested_memory_bytes": requested_memory_bytes,
+        "measurement_scale_percent": measurement_scale_percent,
+        "minimum_host_headroom_bytes": minimum_host_headroom_bytes,
+    }
+    for name, value in numeric_inputs.items():
+        if (not isinstance(value, int) or isinstance(value, bool)
+                or value < 0 or value > max_i64):
+            return unknown(f"automation-resource-input-invalid:{name}")
+    if not 100 <= measurement_scale_percent <= 500:
+        return unknown("automation-resource-input-invalid:measurement_scale_percent")
 
     host = document.get("host")
     if (resource_sample and isinstance(host, dict)
             and host.get("memory_available_status") != "observed"):
         return unknown("host-memory-availability-not-observed")
     available = host.get("memory_available_bytes") if isinstance(host, dict) else None
-    if not isinstance(available, int) or isinstance(available, bool) or available < 0:
+    if (not isinstance(available, int) or isinstance(available, bool)
+            or available < 0 or available > max_i64):
         return unknown("host-memory-availability-unavailable")
     records_document = document.get("execution_records")
     if not isinstance(records_document, dict) or records_document.get("schema") != (
@@ -176,44 +189,69 @@ def evaluate_resource_headroom(
     if not isinstance(envelope, dict) or envelope.get("declared") is not True:
         return unknown("forge-resource-envelope-unavailable")
     memory_limit = envelope.get("memory_max_bytes")
-    if not isinstance(memory_limit, int) or isinstance(memory_limit, bool) or memory_limit <= 0:
+    if (not isinstance(memory_limit, int) or isinstance(memory_limit, bool)
+            or memory_limit <= 0 or memory_limit > max_i64):
         return unknown("forge-memory-envelope-unavailable")
     peak = (observations.get("cgroup_memory_peak_bytes")
             if isinstance(observations, dict) else None)
-    if not isinstance(peak, int) or isinstance(peak, bool) or peak < 0:
+    if (not isinstance(peak, int) or isinstance(peak, bool)
+            or peak < 0 or peak > max_i64):
         return unknown("forge-memory-measurement-unavailable")
 
-    scaled_peak = (peak * measurement_scale_percent + 99) // 100
-    required = max(requested_memory_bytes, scaled_peak)
-    total_required = required + minimum_host_headroom_bytes
-    envelope_ok = peak <= memory_limit
-    enough_headroom = available >= total_required
-    ready = envelope_ok and enough_headroom
-    decision = "ready" if ready else "defer"
-    reason = ("resource-headroom-sufficient" if ready else
-              "previous-measurement-exceeded-envelope" if not envelope_ok else
-              "current-host-headroom-insufficient")
+    try:
+        decision = native.evaluate_resource_headroom(
+            mncs=native.find_mncs(mncs),
+            observed_at_ms=observed_at,
+            now_ms=evaluated_at,
+            max_age_ms=max_age_ms,
+            host_available_bytes=available,
+            envelope_memory_max_bytes=memory_limit,
+            measured_peak_bytes=peak,
+            requested_memory_bytes=requested_memory_bytes,
+            scale_percent=measurement_scale_percent,
+            minimum_host_headroom_bytes=minimum_host_headroom_bytes,
+        )
+    except native.NativeError as error:
+        return unknown(f"automation-resource-decision-unavailable:{str(error)[:120]}")
+    condition = decision.get("condition")
+    reason_code = decision.get("reason")
+    if (not isinstance(condition, int) or isinstance(condition, bool)
+            or condition not in (COND_FALSE, COND_TRUE, COND_UNKNOWN)
+            or not isinstance(reason_code, int) or isinstance(reason_code, bool)):
+        return unknown("automation-resource-decision-malformed")
+    reasons = {
+        0: "resource-headroom-input-invalid",
+        1: "monitor-observation-in-future",
+        2: "monitor-observation-stale-or-in-future",
+        3: "previous-measurement-exceeded-envelope",
+        4: "current-host-headroom-insufficient",
+        5: "resource-headroom-sufficient",
+    }
+    reason = reasons.get(reason_code, "automation-resource-reason-unknown")
+    status = ("ready" if condition == COND_TRUE else
+              "defer" if condition == COND_FALSE else "unknown")
     evidence = {
         "kind": "resource-headroom",
-        "status": decision,
+        "status": status,
         "reason": reason,
         "observed_at_ms": observed_at,
-        "age_ms": age_ms,
+        "age_ms": decision["age_ms"],
         "measurement_execution": measurement_execution,
         "measurement_subject_identity": measurement_subject_identity,
         "measured_peak_bytes": peak,
         "measurement_envelope_bytes": memory_limit,
         "measurement_scale_percent": measurement_scale_percent,
-        "scaled_measurement_bytes": scaled_peak,
+        "scaled_measurement_bytes": decision["scaled_measurement_bytes"],
         "intent_identity": intent_identity,
         "compiler_estimate_bytes": requested_memory_bytes,
-        "required_memory_bytes": required,
+        "required_memory_bytes": decision["required_memory_bytes"],
+        "total_required_memory_bytes": decision["total_required_memory_bytes"],
         "minimum_host_headroom_bytes": minimum_host_headroom_bytes,
         "host_available_bytes": available,
-        "remaining_after_intent_bytes": available - required,
-        "remaining_after_reserve_bytes": available - total_required,
+        "remaining_after_intent_bytes": decision["remaining_after_intent_bytes"],
+        "remaining_after_reserve_bytes": decision["remaining_after_reserve_bytes"],
     }
-    return (COND_TRUE if ready else COND_FALSE), evidence
+    return condition, evidence
 
 
 CONDITION_NAMES = {0: "false", 1: "true", 2: "unknown"}

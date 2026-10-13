@@ -201,6 +201,39 @@ def evaluate_tick(*, mncs: str, libraries: list[str] | None = None,
     return decision
 
 
+def evaluate_resource_headroom(*, mncs: str,
+                               libraries: list[str] | None = None,
+                               timeout_s: int = 60,
+                               **fields: Any) -> dict[str, Any]:
+    """Call Automation's native resource-headroom predicate."""
+    order = (
+        "observed_at_ms", "now_ms", "max_age_ms",
+        "host_available_bytes", "envelope_memory_max_bytes",
+        "measured_peak_bytes", "requested_memory_bytes",
+        "scale_percent", "minimum_host_headroom_bytes",
+    )
+    args = [{"integer": {"value": int(fields[name])}} for name in order]
+    document = call_function(
+        mncs=mncs,
+        program=str(NATIVE_DIR / "mncs" / "automation" / "evaluation.mncs"),
+        module="mncs.automation.evaluation.v1",
+        function="evaluate_resource_headroom",
+        args=args,
+        libraries=default_libraries((libraries or []) + [str(NATIVE_DIR)]),
+        timeout_s=timeout_s,
+    )
+    if document.get("status") != "returned":
+        raise NativeError(f"native resource evaluation failed: "
+                          f"{document.get('error', document)}")
+    decision = decode_record(document["call"]["returned"])
+    for key in ("condition", "reason", "age_ms", "scaled_measurement_bytes",
+                "required_memory_bytes", "total_required_memory_bytes",
+                "remaining_after_intent_bytes", "remaining_after_reserve_bytes"):
+        if key not in decision:
+            raise NativeError(f"native resource decision missing {key}")
+    return decision
+
+
 RECONCILE_PROGRAM = str(NATIVE_DIR / "mncs" / "automation" / "reconcile.mncs")
 RECONCILE_MODULE = "mncs.automation.reconcile.v1"
 

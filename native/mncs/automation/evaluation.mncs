@@ -41,6 +41,104 @@ record TickDecision { fire: bool, seq: u64, at_ms: i64, wakeup_ms: i64, reason: 
 
 record SeqPick { fire: bool, fire_seq: u64, missed_from: u64, missed_to: u64, new_prev: u64 }
 
+record ResourceHeadroomDecision { condition: u64, reason: u64, age_ms: i64, scaled_measurement_bytes: i64, required_memory_bytes: i64, total_required_memory_bytes: i64, remaining_after_intent_bytes: i64, remaining_after_reserve_bytes: i64 }
+
+fn resource_max_i64() -> (value: i64) {
+    return 9223372036854775807;
+}
+
+fn resource_saturating_add(a: i64, b: i64) -> (value: i64) {
+    let max: i64 = resource_max_i64();
+    if b > max - a {
+        return max;
+    }
+    return a +% b;
+}
+
+fn resource_saturating_multiply(a: i64, b: i64) -> (value: i64) {
+    let max: i64 = resource_max_i64();
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    if a > max / b {
+        return max;
+    }
+    return a * b;
+}
+
+// Calculate ceil(peak * scale / 100) without overflowing the intermediate
+// product. Every input is a non-negative signed-64 value and scale is
+// bounded by the Automation definition validator (100..500 percent).
+fn resource_scaled_peak(peak: i64, scale: i64) -> (value: i64) {
+    let base: i64 = resource_saturating_multiply(peak / 100, scale);
+    let remainder: i64 = peak % 100;
+    let remainder_whole: i64 = resource_saturating_multiply(remainder, scale / 100);
+    let remainder_product: i64 = remainder * (scale % 100);
+    let remainder_fraction: i64 = (remainder_product +% 99) / 100;
+    let tail: i64 = resource_saturating_add(remainder_whole, remainder_fraction);
+    return resource_saturating_add(base, tail);
+}
+
+fn resource_remaining_after_reserve(remaining: i64, reserve: i64) -> (value: i64) {
+    if remaining >= reserve {
+        return remaining -% reserve;
+    }
+    if remaining < 0 {
+        let max: i64 = resource_max_i64();
+        let reserve_floor: i64 = max +% remaining;
+        if reserve > reserve_floor {
+            return 0 -% max;
+        }
+        return remaining -% reserve;
+    }
+    return 0 -% (reserve -% remaining);
+}
+
+fn resource_headroom_unknown(reason: u64, age_ms: i64) -> (decision: ResourceHeadroomDecision) {
+    return ResourceHeadroomDecision {
+        condition: cond_code(CondValue.Unknown),
+        reason: reason,
+        age_ms: age_ms,
+        scaled_measurement_bytes: 0,
+        required_memory_bytes: 0,
+        total_required_memory_bytes: 0,
+        remaining_after_intent_bytes: 0,
+        remaining_after_reserve_bytes: 0,
+    };
+}
+
+// Automation owns the resource-headroom predicate. The host bridge validates
+// provenance and schema, then passes the exact observed values here. Reason
+// codes: 0 invalid numeric input, 1 observation in the future, 2 stale,
+// 3 measurement exceeded its Forge envelope, 4 host headroom is insufficient,
+// 5 ready.
+fn evaluate_resource_headroom(observed_at_ms: i64, now_ms: i64, max_age_ms: i64, host_available_bytes: i64, envelope_memory_max_bytes: i64, measured_peak_bytes: i64, requested_memory_bytes: i64, scale_percent: i64, minimum_host_headroom_bytes: i64) -> (decision: ResourceHeadroomDecision) {
+    if observed_at_ms < 0 || now_ms < 0 || max_age_ms < 0 || host_available_bytes < 0 || envelope_memory_max_bytes <= 0 || measured_peak_bytes < 0 || requested_memory_bytes < 0 || scale_percent < 100 || scale_percent > 500 || minimum_host_headroom_bytes < 0 {
+        return resource_headroom_unknown(0, 0);
+    }
+    if observed_at_ms > now_ms {
+        return resource_headroom_unknown(1, 0);
+    }
+    let age: i64 = now_ms -% observed_at_ms;
+    if age > max_age_ms {
+        return resource_headroom_unknown(2, age);
+    }
+    let scaled: i64 = resource_scaled_peak(measured_peak_bytes, scale_percent);
+    let required: i64 = select(requested_memory_bytes > scaled, requested_memory_bytes, scaled);
+    let remaining: i64 = host_available_bytes -% required;
+    let after_reserve: i64 = resource_remaining_after_reserve(remaining, minimum_host_headroom_bytes);
+    let total_required: i64 = resource_saturating_add(required, minimum_host_headroom_bytes);
+    let envelope_ok: bool = measured_peak_bytes <= envelope_memory_max_bytes;
+    let headroom_ok: bool = remaining >= minimum_host_headroom_bytes;
+    if envelope_ok == false {
+        return ResourceHeadroomDecision { condition: cond_code(CondValue.False), reason: 3, age_ms: age, scaled_measurement_bytes: scaled, required_memory_bytes: required, total_required_memory_bytes: total_required, remaining_after_intent_bytes: remaining, remaining_after_reserve_bytes: after_reserve };
+    }
+    if headroom_ok == false {
+        return ResourceHeadroomDecision { condition: cond_code(CondValue.False), reason: 4, age_ms: age, scaled_measurement_bytes: scaled, required_memory_bytes: required, total_required_memory_bytes: total_required, remaining_after_intent_bytes: remaining, remaining_after_reserve_bytes: after_reserve };
+    }
+    return ResourceHeadroomDecision { condition: cond_code(CondValue.True), reason: 5, age_ms: age, scaled_measurement_bytes: scaled, required_memory_bytes: required, total_required_memory_bytes: total_required, remaining_after_intent_bytes: remaining, remaining_after_reserve_bytes: after_reserve };
+}
+
 fn reason_due_fire() -> (code: u64) {
     return 0;
 }
@@ -261,4 +359,44 @@ test first_flag_leaves_pinned_alone() -> (result: TestResult) {
         return from_assertion(equals_i64(1, pin.seq as i64, 5311));
     }
     return from_assertion(equals_i64(1, pin.seq as i64, 5311));
+}
+
+test resource_headroom_uses_scaled_peak_and_reserve() -> (result: TestResult) {
+    let decision: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 15000, 60000, 8192, 4096, 3000, 3500, 125, 256);
+    if decision.condition == cond_code(CondValue.True) && decision.reason == 5 && decision.scaled_measurement_bytes == 3750 && decision.required_memory_bytes == 3750 && decision.total_required_memory_bytes == 4006 && decision.remaining_after_intent_bytes == 4442 && decision.remaining_after_reserve_bytes == 4186 {
+        return from_assertion(equals_i64(1, 1, 5320));
+    }
+    return from_assertion(equals_i64(1, 0, 5320));
+}
+
+test resource_headroom_defers_on_envelope_or_current_headroom() -> (result: TestResult) {
+    let envelope: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 15000, 60000, 8192, 4096, 5000, 3500, 125, 256);
+    let headroom: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 15000, 60000, 4000, 4096, 3000, 3500, 125, 256);
+    if envelope.condition == cond_code(CondValue.False) && envelope.reason == 3 && headroom.condition == cond_code(CondValue.False) && headroom.reason == 4 && headroom.remaining_after_reserve_bytes == -6 {
+        return from_assertion(equals_i64(1, 1, 5321));
+    }
+    return from_assertion(equals_i64(1, 0, 5321));
+}
+
+test resource_headroom_keeps_future_and_stale_observations_unknown() -> (result: TestResult) {
+    let future: ResourceHeadroomDecision = evaluate_resource_headroom(20000, 10000, 60000, 8192, 4096, 3000, 3500, 125, 256);
+    let stale: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 80000, 60000, 8192, 4096, 3000, 3500, 125, 256);
+    if future.condition == cond_code(CondValue.Unknown) && future.reason == 1 && stale.condition == cond_code(CondValue.Unknown) && stale.reason == 2 && stale.age_ms == 70000 {
+        return from_assertion(equals_i64(1, 1, 5322));
+    }
+    return from_assertion(equals_i64(1, 0, 5322));
+}
+
+test resource_headroom_saturates_scaled_measurements_without_overflow() -> (result: TestResult) {
+    let max: i64 = resource_max_i64();
+    let decision: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 15000, 60000, max, max, max, 1, 500, 1);
+    if decision.condition == cond_code(CondValue.False) && decision.reason == 4 && decision.scaled_measurement_bytes == max && decision.required_memory_bytes == max && decision.remaining_after_intent_bytes == 0 && decision.remaining_after_reserve_bytes == -1 {
+        return from_assertion(equals_i64(1, 1, 5323));
+    }
+    return from_assertion(equals_i64(1, 0, 5323));
+}
+
+test resource_headroom_rejects_invalid_numeric_inputs_as_unknown() -> (result: TestResult) {
+    let invalid: ResourceHeadroomDecision = evaluate_resource_headroom(10000, 15000, 60000, 8192, 4096, 3000, 3500, 99, 256);
+    return from_assertion(equals_bool(true, invalid.condition == cond_code(CondValue.Unknown) && invalid.reason == 0, 5324));
 }

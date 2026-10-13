@@ -46,7 +46,9 @@ and a cgroup memory peak. It raises the next compiler estimate to at least
 the measured peak scaled by `measurement_scale_percent` (100..500), then
 fires only when that requirement plus `minimum_host_headroom_bytes` fits
 the observed host availability. Stale, ambiguous, mismatched, or incomplete
-measurements are UNKNOWN. The full observation is retained with a fired
+measurements are UNKNOWN. The host bridge validates exact Monitor/Forge
+provenance; native Automation evaluates freshness, scaling, envelope fit,
+and available headroom. The full observation is retained with a fired
 occurrence so the scheduling decision can be explained.
 
 ```json

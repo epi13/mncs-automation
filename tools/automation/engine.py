@@ -477,6 +477,7 @@ def _evaluate_condition(definition: dict[str, Any], state: dict[str, Any],
             return value, {"kind": "path-changed", "unreadable": True}
         return value, {"kind": "path-changed", **observation}
     return conditions.evaluate_resource_headroom(
+        mncs=mncs,
         path=condition["path"],
         measurement_execution=condition["measurement_execution"],
         measurement_subject_identity=condition[
