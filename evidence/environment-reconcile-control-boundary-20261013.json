@@ -1,0 +1,130 @@
+{
+  "schema_version": "mncs-automation.environment-rpc-boundary-evidence/1",
+  "identity": "ev_automation_environment_rpc_boundary_20261013",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-automation",
+  "recorded_at": "2026-10-13T00:52:00Z",
+  "source": {
+    "revision": "468c4a729275aec1afbc077f43dea0702dac8800",
+    "files": [
+      {
+        "path": "tools/automation/targets.py",
+        "sha256": "93904710bc6e05389231eb113ef951901d391228e71abeee1138793493ad260d"
+      },
+      {
+        "path": "tests/test_automation.py",
+        "sha256": "2953c5e2d10377ca6905e640d67f5042b82d33100f74b3988729e0eef1e9b0bc"
+      },
+      {
+        "path": "docs/PRESSURES.md",
+        "sha256": "2b2191331d64518fcc2c16733d8d98ce889827c9941f1b40181c904f9cc920a5"
+      }
+    ]
+  },
+  "protected_boundary": {
+    "backend": "bwrap",
+    "project": "mncs-automation",
+    "operation": "Automation environment-reconcile target",
+    "environment_cli_request": [
+      "mncs-env",
+      "--state-dir",
+      "<temporary test-owned state>",
+      "reconciler",
+      "--run-once",
+      "--workspace",
+      "<temporary test-owned workspace>"
+    ],
+    "control_response": {
+      "error": "Environment RPC fixes canonical persistence configuration",
+      "diagnostics": {
+        "code": "authority-denied",
+        "transport": "mncs-control-environment-rpc",
+        "publication_completed": false,
+        "next": "inspect the structured Environment diagnostic"
+      }
+    },
+    "automation_outcome": {
+      "status": "unknown",
+      "reason": "environment-rpc-not-admitted",
+      "publication_completed": false
+    },
+    "other_control_contract_fact": "reconciler is not in the Environment RPC command allowlist"
+  },
+  "validation": {
+    "focused_command": "env -u MNCS_BIN -u MNCS_BINARY -u MNCS_LANGUAGE_ROOT -u MNCS_TEST_NATIVE PYTHONPATH=tools PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q tests/test_automation.py -k 'EnvironmentReconcileTargetTests or resource_headroom'",
+    "focused_result": {
+      "status": "passed",
+      "passed": 8,
+      "deselected": 35,
+      "subtests_passed": 2,
+      "duration_seconds": 4.63,
+      "sandbox_backend": "bwrap"
+    },
+    "targeted_boundary_test": {
+      "test": "EnvironmentReconcileTargetTests.test_environment_rpc_denials_remain_unknown_with_diagnostics",
+      "status": "passed",
+      "subtests_passed": 2
+    },
+    "live_target_probe": {
+      "status": "unknown",
+      "reason": "environment-rpc-not-admitted",
+      "diagnostic_code": "authority-denied",
+      "transport": "mncs-control-environment-rpc",
+      "publication_completed": false
+    },
+    "static_checks": {
+      "python_compile": "passed",
+      "git_diff_check": "passed"
+    },
+    "full_module": {
+      "status": "incomplete",
+      "sandbox_job_id": "term-72e464178ec3af6050819a85",
+      "reason": "Control runner timeout at 300 seconds after 37 passing progress markers; no final pytest summary"
+    }
+  },
+  "canonical_store_sample": {
+    "source_owner": "mncs-system-monitor",
+    "capability": "mncs-system-monitor:system-resource-sample",
+    "session_id": "ses_7226fbcfe65820f7",
+    "protected_execution": "bwrap",
+    "store_reference": "mncs-store:ses_7226fbcfe65820f7:capability-invocation-artifacts:4ab55d0b557e0526759fe782ce87d145121720365477be64068c48d56ae3bc1e",
+    "sha256": "830ee1c0684d03bcc63f21073740c3a67295e0b7c21ed968c7aa424fdd650921",
+    "byte_count": 460,
+    "observed_at_unix_ms": 1791852670178,
+    "host_memory_available_bytes": 9105014784,
+    "forge_execution_records_present": false,
+    "readback_matches_publication_reference": true
+  },
+  "resource_feedback_readiness": {
+    "real_forge_receipt": false,
+    "compiler_execution": false,
+    "retained_measurement_influenced_subsequent_compiler_decision": false,
+    "status": "component and boundary evidence only; live resource-loop acceptance remains unproven"
+  },
+  "ownership_at_capture": {
+    "automation": {
+      "claim_id": "claim:mncs-automation",
+      "version": 5,
+      "owner_session": "ses_7226fbcfe65820f7"
+    },
+    "system_monitor": {
+      "claim_id": "claim:mncs-system-monitor",
+      "version": 1,
+      "owner_session": "ses_7226fbcfe65820f7"
+    },
+    "compiler": {
+      "claim_id": "claim:mncs-compiler",
+      "version": 63,
+      "owner_session": "ses_d2537acde8b8a875",
+      "handoff": "pending"
+    },
+    "forge": {
+      "claim_id": "claim:mncs-forge",
+      "version": 28,
+      "owner_session": "ses_95c3aa35b8544042",
+      "handoff": "pending"
+    }
+  },
+  "readiness": "Automation preserves Control's authority denial as UNKNOWN with exact diagnostics. Canonical host sample publication/readback is proven, but no Forge receipt, compiler execution, or subsequent admission is proven."
+}
