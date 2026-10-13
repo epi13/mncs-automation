@@ -138,6 +138,14 @@ tests and a native scheduling tick pass. The full Automation module remains
 incomplete after its Control runner timeout, and the latest bounded tail run
 found a separate Environment-reconcile contract failure (AUTO-P13).
 
+Automation now exposes a separate read-only `automation-resource-headroom-evaluation`
+operation for an Environment-selected input artifact. It verifies the bounded
+Environment manifest and selected file digest, evaluates the existing native
+resource condition, and returns a decision artifact to Environment's private
+invocation workspace for canonical publication. It does not run the persistent
+tick loop or write Automation state. The operation reports UNKNOWN when the
+sample is missing or its Forge receipt identity does not match.
+
 Before this loop can schedule compiler work, an actual Forge receipt must flow
 through System Monitor and canonical Store into a native Automation decision,
 then inform a subsequent compiler admission. The current live sample is not a

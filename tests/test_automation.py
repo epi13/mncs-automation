@@ -9,12 +9,15 @@ directory, never against wall-clock behavior.
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import random
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 from pathlib import Path
 
@@ -23,11 +26,173 @@ import sys
 
 sys.path.insert(0, str(REPO / "tools"))
 
-from automation import codes, engine, model, native, store, targets  # noqa: E402
+from automation import (cli, codes, engine, model, native, provider_inputs,
+                       store, targets)  # noqa: E402
 from automation.model import DefinitionError  # noqa: E402
 
 FIXTURES = REPO / "tests" / "fixtures"
 WORKSPACE = Path(os.environ.get("MNCS_WORKSPACE_ROOT", str(REPO.parent)))
+
+
+class EnvironmentProviderInputTests(unittest.TestCase):
+    def test_manifest_declares_resource_evaluation_without_scheduler_writes(self) -> None:
+        manifest = json.loads((REPO / ".mncs" / "project.json").read_text())
+        contract = next(
+            item for item in manifest["contracts"]["provides"]
+            if item["contract"] == "automation-resource-headroom-evaluation"
+        )
+        self.assertEqual(contract["effects"], ["read"])
+        self.assertEqual(contract["invocation"]["kind"], "python")
+        self.assertEqual(contract["invocation"]["path"], "tools/mncs_automation.py")
+        self.assertEqual(
+            contract["invocation"]["fixed_argv"], ["resource-evaluate"]
+        )
+
+    def _arguments(self) -> list[str]:
+        return [
+            "resource-evaluate",
+            "--input-name", "monitor-sample",
+            "--measurement-execution", "forge-execution-next",
+            "--measurement-subject-identity", "a" * 64,
+            "--intent-identity", "compiler-intent-next",
+            "--requested-memory-bytes", "2048",
+            "--measurement-scale-percent", "125",
+            "--minimum-host-headroom-bytes", "256",
+            "--max-age-ms", "60000",
+            "--now-ms", "15000",
+        ]
+
+    def _environment(self, root: Path, content: bytes, *, digest: str | None = None) -> dict[str, str]:
+        input_root = root / "input"
+        output_root = root / "output"
+        input_root.mkdir()
+        output_root.mkdir()
+        local_path = input_root / "0000.artifact"
+        local_path.write_bytes(content)
+        local_path.chmod(0o400)
+        artifact = {
+            "name": "monitor-sample",
+            "capability": "mncs-system-monitor:system-resource-sample",
+            "binding_id": "cap_0123456789abcdef",
+            "store_reference": "mncs-store:ses_fixture:capability-invocation-artifacts:" + "b" * 64,
+            "path": "system-resource-sample.json",
+            "byte_count": len(content),
+            "sha256": digest or hashlib.sha256(content).hexdigest(),
+            "local_path": "0000.artifact",
+        }
+        other_content = b'{"unselected":true}'
+        other_path = input_root / "0001.artifact"
+        other_path.write_bytes(other_content)
+        other_path.chmod(0o400)
+        other_artifact = {
+            **artifact,
+            "name": "unselected-input",
+            "path": "unselected.json",
+            "byte_count": len(other_content),
+            "sha256": hashlib.sha256(other_content).hexdigest(),
+            "local_path": "0001.artifact",
+        }
+        manifest = {
+            "schema_version": provider_inputs.INPUT_SCHEMA,
+            "session_id": "ses_fixture",
+            "artifacts": [artifact, other_artifact],
+        }
+        return {
+            "MNCS_ENV_INPUT_ARTIFACT_DIR": str(input_root),
+            "MNCS_ENV_INPUT_ARTIFACTS_JSON": json.dumps(manifest),
+            "MNCS_ENV_SESSION_ARTIFACT_DIR": str(output_root),
+        }
+
+    def test_resource_evaluate_consumes_and_retains_environment_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sample = {
+                "schema": "mncs.system-monitor.resource-sample.v1",
+                "observed_at": 10_000,
+                "host": {
+                    "memory_available_status": "observed",
+                    "memory_available_bytes": 8_192,
+                },
+                "execution_records": {
+                    "schema": "mncs.system-monitor.execution-records.v1",
+                    "records": [{
+                        "execution": "forge-execution-next",
+                        "source": "forge_receipt",
+                        "subject_record_id": "compiler-task-next",
+                        "subject_identity": "a" * 64,
+                        "resource_envelope": {
+                            "declared": True,
+                            "memory_max_bytes": 4_096,
+                        },
+                        "resource_observations": {
+                            "cgroup_memory_peak_bytes": 3_000,
+                        },
+                    }],
+                },
+            }
+            content = json.dumps(sample).encode("utf-8")
+            environment = self._environment(root, content)
+            native_decision = {
+                "condition": codes.COND_TRUE,
+                "reason": 5,
+                "age_ms": 5_000,
+                "scaled_measurement_bytes": 3_750,
+                "required_memory_bytes": 2_048,
+                "total_required_memory_bytes": 6_095,
+                "remaining_after_intent_bytes": 6_144,
+                "remaining_after_reserve_bytes": 5_888,
+            }
+            output = io.StringIO()
+            with (patch.dict(os.environ, environment),
+                  patch.object(cli.conditions.native, "find_mncs",
+                               return_value="stub-mncs"),
+                  patch.object(cli.conditions.native, "evaluate_resource_headroom",
+                               return_value=native_decision) as evaluate,
+                  redirect_stdout(output)):
+                result_code = cli.main(self._arguments())
+
+            self.assertEqual(result_code, 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["condition"], "true")
+            self.assertEqual(result["evidence"]["status"], "ready")
+            self.assertEqual(result["evidence"]["measurement_execution"],
+                             "forge-execution-next")
+            self.assertEqual(result["evidence"]["measured_peak_bytes"], 3_000)
+            self.assertEqual(result["input_artifact"]["name"], "monitor-sample")
+            self.assertEqual(
+                result["input_artifact"]["sha256"], hashlib.sha256(content).hexdigest()
+            )
+            self.assertEqual(result["input_artifact"]["byte_count"], len(content))
+            self.assertEqual(evaluate.call_args.kwargs["mncs"], "stub-mncs")
+            self.assertEqual(evaluate.call_args.kwargs["host_available_bytes"], 8_192)
+            self.assertEqual(evaluate.call_args.kwargs["measured_peak_bytes"], 3_000)
+            self.assertEqual(evaluate.call_args.kwargs["requested_memory_bytes"], 2_048)
+            retained = json.loads(
+                (root / "output" / "resource-headroom-decision.json").read_text()
+            )
+            self.assertEqual(retained, result)
+            self.assertFalse((root / "state").exists())
+
+    def test_resource_evaluate_reports_unknown_for_tampered_environment_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            content = b'{"schema":"mncs.system-monitor.resource-sample.v1"}'
+            environment = self._environment(root, content, digest="0" * 64)
+            output = io.StringIO()
+            with patch.dict(os.environ, environment), patch.object(
+                cli.conditions, "evaluate_resource_headroom",
+            ) as evaluate, redirect_stdout(output):
+                result_code = cli.main(self._arguments())
+
+            self.assertEqual(result_code, 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["condition"], "unknown")
+            self.assertEqual(
+                result["evidence"]["reason"],
+                "environment-provider-input-invalid",
+            )
+            self.assertIsNone(result["input_artifact"])
+            evaluate.assert_not_called()
 
 
 def find_mncs() -> str | None:

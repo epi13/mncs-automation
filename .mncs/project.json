@@ -1,7 +1,7 @@
 {
   "schema_version": "mncs-family.repository-manifest/v0alpha1",
   "repository": "mncs-automation",
-  "revision": 4,
+  "revision": 5,
   "manifest_location": "in-repository",
   "authority": {
     "note": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems."
@@ -92,6 +92,34 @@
           "tools/automation/model.py",
           "tests/test_automation.py"
         ]
+      },
+      {
+        "contract": "automation-resource-headroom-evaluation",
+        "version": "1",
+        "kind": "read-only-resource-headroom-decision",
+        "stability": "experimental",
+        "effects": [
+          "read"
+        ],
+        "fingerprint_sources": [
+          "native/mncs/automation/evaluation.mncs",
+          "tools/automation/conditions.py",
+          "tools/automation/provider_inputs.py",
+          "tools/automation/cli.py",
+          "tests/test_automation.py"
+        ],
+        "invocation": {
+          "kind": "python",
+          "path": "tools/mncs_automation.py",
+          "fixed_argv": [
+            "resource-evaluate"
+          ],
+          "toolchain": {
+            "repository": "mncs-language",
+            "path": "target/release/mncs"
+          },
+          "toolchain_env": "MNCS_BIN"
+        }
       },
       {
         "contract": "automation-occurrence",

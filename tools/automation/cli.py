@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
-from . import engine, native, store, targets
+from . import conditions, engine, native, provider_inputs, store, targets
+from .codes import COND_UNKNOWN
 from .model import (DefinitionError, automation_id, fresh_state,
                     validate_definition)
 
@@ -317,6 +320,88 @@ def cmd_recover(args: argparse.Namespace) -> int:
     return 0
 
 
+def _write_resource_evaluation_artifact(result: dict[str, Any]) -> None:
+    """Write one bounded result into Environment's private invocation output."""
+    raw_root = os.environ.get("MNCS_ENV_SESSION_ARTIFACT_DIR")
+    if not raw_root:
+        return
+    root = Path(raw_root)
+    if not root.is_absolute():
+        raise OSError("Environment result artifact directory must be absolute")
+    encoded = json.dumps(
+        result, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    if len(encoded) > 64 * 1024:
+        raise OSError("resource evaluation result exceeds its artifact bound")
+    directory_fd = os.open(
+        root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        if not stat.S_ISDIR(os.fstat(directory_fd).st_mode):
+            raise OSError("Environment result artifact root is not a directory")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(
+            "resource-headroom-decision.json", flags, 0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(descriptor, "wb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise OSError("resource evaluation result is not a regular file")
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+    finally:
+        os.close(directory_fd)
+
+
+def cmd_resource_evaluate(args: argparse.Namespace) -> int:
+    """Evaluate one Environment-supplied sample without mutating scheduler state."""
+    input_provenance = None
+    try:
+        document, input_provenance = provider_inputs.read_environment_input(
+            args.input_name,
+        )
+        condition, evidence = conditions.evaluate_resource_headroom(
+            mncs=getattr(args, "mncs", None),
+            document=document,
+            measurement_execution=args.measurement_execution,
+            measurement_subject_identity=args.measurement_subject_identity,
+            intent_identity=args.intent_identity,
+            requested_memory_bytes=args.requested_memory_bytes,
+            measurement_scale_percent=args.measurement_scale_percent,
+            minimum_host_headroom_bytes=args.minimum_host_headroom_bytes,
+            max_age_ms=args.max_age_ms,
+            now_ms=getattr(args, "now_ms", None),
+        )
+    except provider_inputs.ProviderInputError as error:
+        condition = COND_UNKNOWN
+        evidence = {
+            "kind": "resource-headroom",
+            "status": "unknown",
+            "reason": "environment-provider-input-invalid",
+            "detail": str(error)[:160],
+            "intent_identity": args.intent_identity,
+            "measurement_execution": args.measurement_execution,
+            "measurement_subject_identity": args.measurement_subject_identity,
+        }
+    result = {
+        "schema_version": "mncs.automation.resource-headroom-evaluation/1",
+        "condition": conditions.CONDITION_NAMES.get(condition, "unknown"),
+        "condition_value": condition,
+        "evidence": evidence,
+        "input_artifact": input_provenance,
+    }
+    try:
+        _write_resource_evaluation_artifact(result)
+    except OSError as error:
+        print(f"resource-evaluate: cannot retain decision artifact: {error}",
+              file=sys.stderr)
+        return 4
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def _ms_now() -> int:
     return int(time.time() * 1000)
 
@@ -388,6 +473,17 @@ def build_parser() -> argparse.ArgumentParser:
     tick.add_argument("--dry-run", action="store_true")
     tick.add_argument("--no-execute", action="store_true")
     tick.set_defaults(func=cmd_tick)
+
+    resource_evaluate = sub.add_parser("resource-evaluate", parents=[common])
+    resource_evaluate.add_argument("--input-name", required=True)
+    resource_evaluate.add_argument("--measurement-execution", required=True)
+    resource_evaluate.add_argument("--measurement-subject-identity", required=True)
+    resource_evaluate.add_argument("--intent-identity", required=True)
+    resource_evaluate.add_argument("--requested-memory-bytes", type=int, required=True)
+    resource_evaluate.add_argument("--measurement-scale-percent", type=int, required=True)
+    resource_evaluate.add_argument("--minimum-host-headroom-bytes", type=int, default=0)
+    resource_evaluate.add_argument("--max-age-ms", type=int, required=True)
+    resource_evaluate.set_defaults(func=cmd_resource_evaluate)
 
     run = sub.add_parser("run", parents=[common])
     run.add_argument("--max-idle-s", type=int, default=60)

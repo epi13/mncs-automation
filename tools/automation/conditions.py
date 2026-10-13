@@ -90,7 +90,8 @@ def evaluate_path_changed(*, path: str, last_observed: dict[str, Any] | None,
 def evaluate_resource_headroom(
     *,
     mncs: str | None = None,
-    path: str,
+    path: str | None = None,
+    document: dict[str, Any] | None = None,
     measurement_execution: str,
     measurement_subject_identity: str,
     intent_identity: str,
@@ -111,17 +112,20 @@ def evaluate_resource_headroom(
             "measurement_subject_identity": measurement_subject_identity,
         }
 
-    try:
-        source = Path(path)
-        if not source.is_file():
-            return unknown("monitor-projection-not-a-regular-file")
-        with source.open("rb") as handle:
-            raw = handle.read(4 * 1024 * 1024 + 1)
-        if len(raw) > 4 * 1024 * 1024:
-            return unknown("monitor-projection-exceeds-size-bound")
-        document = json.loads(raw)
-    except (OSError, ValueError) as error:
-        return unknown(f"monitor-projection-unavailable:{str(error)[:160]}")
+    if document is None:
+        if path is None:
+            return unknown("monitor-projection-unavailable")
+        try:
+            source = Path(path)
+            if not source.is_file():
+                return unknown("monitor-projection-not-a-regular-file")
+            with source.open("rb") as handle:
+                raw = handle.read(4 * 1024 * 1024 + 1)
+            if len(raw) > 4 * 1024 * 1024:
+                return unknown("monitor-projection-exceeds-size-bound")
+            document = json.loads(raw)
+        except (OSError, ValueError) as error:
+            return unknown(f"monitor-projection-unavailable:{str(error)[:160]}")
     if not isinstance(document, dict):
         return unknown("monitor-projection-malformed")
     schema = document.get("schema")
