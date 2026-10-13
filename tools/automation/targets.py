@@ -189,6 +189,21 @@ def _execute_environment_reconcile(target: dict[str, Any],
                 "stderr": completed.stderr.strip()[-500:],
                 "result_artifact": str(artifact)}
     if completed.returncode != 0:
+        diagnostics = report.get("diagnostics")
+        if (isinstance(diagnostics, dict)
+                and diagnostics.get("transport") == "mncs-control-environment-rpc"
+                and diagnostics.get("code") in ("authority-denied", "operation-unavailable")
+                and diagnostics.get("publication_completed") is False):
+            # Control can intentionally withhold this provider operation or
+            # reject a persistence override. Keep the exact owner diagnostic
+            # and let Automation represent the unavailable capability as
+            # UNKNOWN instead of treating a denied request as an execution
+            # result.
+            return {"status": "unknown",
+                    "reason": "environment-rpc-not-admitted",
+                    "diagnostics": diagnostics,
+                    "error": str(report.get("error", ""))[:500],
+                    "result_artifact": str(artifact)}
         return {"status": "failed", "reason": "reconciler-error",
                 "exit_code": completed.returncode,
                 "stderr": completed.stderr.strip()[-500:],

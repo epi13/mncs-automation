@@ -127,19 +127,32 @@ documented canonical-state sourcing lands.
 ## AUTO-P12: live resource feedback lacks provider/runtime composition (open)
 
 The resource-headroom condition requires a fresh host sample plus one exact,
-retained Forge receipt and subject identity. In the protected Environment
-exercise, mncs-system-monitor:system-resource-sample returned a real host
-sample through canonical Store, but that privacy-minimized artifact contained
-no Forge execution records. Automation correctly returned UNKNOWN with
-forge-execution-records-unavailable. A temporary native engine tick then
-returned evaluation-unreachable: the mncs resolved in the Automation
-execution environment exposes a different CLI and has no call operation, so
-evaluate_tick produced no scheduling decision.
+retained Forge receipt and subject identity. The protected Environment
+`mncs-system-monitor:system-resource-sample` invocation now published a current
+host sample through canonical Store and read back the same Store reference and
+SHA-256. The privacy-minimized artifact contained no Forge execution records,
+so it cannot authorize resource-aware compiler scheduling. The default
+Automation runtime resolver now finds the workspace Language release CLI and
+its sibling libraries with environment overrides unset; focused protected
+tests and a native scheduling tick pass. The full Automation module remains
+incomplete after its Control runner timeout, and the latest bounded tail run
+found a separate Environment-reconcile contract failure (AUTO-P13).
 
-Before this loop can schedule compiler work, the existing owner contracts must
-provide a receipt-correlated Monitor projection and the correct Language Service
-call runtime inside the restricted Automation environment. Verify with a real
-Forge execution, retained receipt, native Automation decision, and subsequent
-compiler admission. The current sample is not a compiler measurement and no
-resource-loop acceptance is claimed. See
-evidence/resource-sample-protected-read-20261012.json.
+Before this loop can schedule compiler work, an actual Forge receipt must flow
+through System Monitor and canonical Store into a native Automation decision,
+then inform a subsequent compiler admission. The current live sample is not a
+compiler measurement and no resource-loop acceptance is claimed. See
+`evidence/resource-sample-protected-read-20261012.json` and
+`evidence/resource-runtime-resolution-20261013.json`.
+
+## AUTO-P13: Environment reconciliation lacks a mediated Control operation (open)
+
+The `environment-reconcile` target currently invokes `mncs-env reconciler`
+with a caller-selected `--state-dir`. In protected Automation bwrap, Control
+rejects that file-persistence override with `authority-denied` and
+`publication_completed=false`; Control also does not expose the `reconciler`
+operation. Automation now records that owner diagnostic and reports UNKNOWN
+for these unavailable or denied Environment RPC outcomes. A successful
+scheduled reconciliation requires a narrow session-bound Environment/Control
+operation that uses canonical persistence. Do not substitute a writable file
+state directory for that contract.

@@ -1150,35 +1150,53 @@ class EnvironmentReconcileTargetTests(EngineCase):
             targets_mod.check_policy(target=target, policy=policy,
                                      mncs_bin="mncs")
 
-    @need_environment
-    @need_mncs
-    def test_scheduled_reconcile_fires_and_reports(self) -> None:
-        assert ENVIRONMENT_REPO is not None
-        policy = open_policy()
-        policy["allowed_target_kinds"] = list(policy["allowed_target_kinds"])
-        policy["allowed_target_kinds"].append("environment-reconcile")
-        aid = self.define({
-            "schema_version": codes.DEFINITION_SCHEMA,
-            "name": "env-reconcile-proof",
-            "trigger": {"kind": "schedule",
-                        "schedule": {"kind": "one-shot", "at_ms": 5_000}},
-            "target": {"kind": "environment-reconcile",
-                       "environment_repo": ENVIRONMENT_REPO,
-                       "state_dir": str(self.tmp / "env-state"),
-                       "workspace": str(self.tmp),
-                       "libraries": LIBRARIES,
-                       "timeout_s": 120},
-            "granted_capabilities": ["environment:reconcile"]})
-        from automation import engine as engine_mod
-        report = engine_mod.tick(state_dir=self.state_dir, mncs=MNCS,
-                                 now_ms=5_001, policy=policy)
-        first = report["evaluated"][0]
-        self.assertEqual(first["decision"], "fired")
-        outcome = first["outcome"]
-        self.assertEqual(outcome["status"], "ok")
-        self.assertIn("observations", outcome)
-        self.assertTrue(Path(outcome["result_artifact"]).is_file())
-        self.assertEqual(self.occurrences(aid)[0]["decision"], "fired")
+    def test_environment_rpc_denials_remain_unknown_with_diagnostics(self) -> None:
+        import subprocess
+
+        from automation import targets as targets_mod
+
+        environment_repo = self.tmp / "environment"
+        entry = environment_repo / "scripts" / "mncs-env"
+        entry.parent.mkdir(parents=True)
+        entry.write_text("test placeholder\n", encoding="utf-8")
+        target = {
+            "kind": "environment-reconcile",
+            "environment_repo": str(environment_repo),
+            "state_dir": str(self.tmp / "env-state"),
+            "workspace": str(self.tmp),
+            "timeout_s": 1,
+        }
+
+        for code in ("authority-denied", "operation-unavailable"):
+            with self.subTest(code=code):
+                diagnostics = {
+                    "code": code,
+                    "transport": "mncs-control-environment-rpc",
+                    "publication_completed": False,
+                    "next": "inspect the structured Environment diagnostic",
+                }
+                response = {
+                    "error": "Environment operation is not admitted",
+                    "diagnostics": diagnostics,
+                }
+                completed = subprocess.CompletedProcess(
+                    args=["mncs-env", "reconciler"], returncode=3,
+                    stdout=json.dumps(response), stderr="",
+                )
+                with patch("subprocess.run", return_value=completed):
+                    outcome = targets_mod._execute_environment_reconcile(
+                        target=target,
+                        artifacts_dir=self.tmp / "artifacts",
+                        invocation_id=f"environment-rpc-{code}",
+                        timeout_s=None,
+                    )
+
+                self.assertEqual(outcome["status"], "unknown")
+                self.assertEqual(outcome["reason"],
+                                 "environment-rpc-not-admitted")
+                self.assertEqual(outcome["diagnostics"], diagnostics)
+                self.assertFalse(outcome["diagnostics"]["publication_completed"])
+                self.assertTrue(Path(outcome["result_artifact"]).is_file())
 
 
 class NativeSuiteTests(unittest.TestCase):
