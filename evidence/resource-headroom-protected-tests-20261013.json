@@ -1,0 +1,69 @@
+{
+  "schema_version": "mncs-automation.resource-headroom-protected-tests/1",
+  "evidence_identity": "ev_automation_resource_headroom_protected_tests_20261013",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "session_id": "ses_7226fbcfe65820f7",
+  "owner": "mncs-automation",
+  "recorded_at": "2026-10-13T14:14:38Z",
+  "source": {
+    "repository": "mncs-automation",
+    "branch": "main",
+    "revision": "2e9b1bb3d9043ddfede247005818aa3e10fd0eda",
+    "claim": {
+      "claim_id": "claim:mncs-automation",
+      "identity": "clm_052e93b760382ca7",
+      "version": 6,
+      "scope": "exclusive repository"
+    },
+    "files": [
+      {
+        "path": "tools/automation/conditions.py",
+        "sha256": "35376efb781e8af5f78a7ecd9e6baadfea0a8ebb8eea76f4242d5638479b7ae8"
+      },
+      {
+        "path": "tools/automation/cli.py",
+        "sha256": "dc0fd4514306394a3e75a7f71e625902c6006e1620f6a7017bd8adc0821ec94b"
+      },
+      {
+        "path": "tests/test_automation.py",
+        "sha256": "1b60db54915d976434400d001c8b5e6c5c96ac6698b2bb9f54a86208ac18dadf"
+      }
+    ]
+  },
+  "execution": {
+    "job_id": "term-c66831c7e12c7876ec13f560",
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest tests/test_automation.py -k 'resource_evaluate or resource_headroom' -q",
+    "sandbox_backend": "bwrap",
+    "scope": "project",
+    "project": "mncs-automation",
+    "network": false,
+    "completed_at": "2026-10-13T14:14:38Z",
+    "exit_code": 0
+  },
+  "results": {
+    "passed": 7,
+    "failed": 0,
+    "deselected": 39,
+    "tests": [
+      "test_resource_evaluate_consumes_and_retains_environment_input",
+      "test_resource_evaluate_reports_unknown_for_tampered_environment_input",
+      "test_resource_headroom_requires_exact_bounded_identities",
+      "test_resource_headroom_defers_then_fires_with_retained_measurement",
+      "test_resource_headroom_preserves_unknown_for_stale_or_wrong_identity",
+      "test_resource_headroom_consumes_privacy_minimized_resource_sample",
+      "test_resource_headroom_crash_recovery_keeps_decision_evidence"
+    ]
+  },
+  "coverage": {
+    "environment_input_and_retained_decision_contracts_pass": true,
+    "stale_or_wrong_measurement_identity_remains_unknown": true,
+    "isolated_test_scheduler_recovers_retained_decision_evidence": true,
+    "canonical_store_mutated": false,
+    "real_forge_execution_used": false,
+    "subsequent_decision_grounded_in_real_compiler_measurement": false
+  },
+  "readiness": {
+    "status": "bounded-policy-tests-pass",
+    "reason": "The protected Automation resource-headroom input and evaluation tests pass. These tests use test-owned inputs; they do not prove a real Forge receipt or a subsequent scheduling decision from a compiler measurement."
+  }
+}
