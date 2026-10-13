@@ -1,0 +1,62 @@
+{
+  "schema_version": "mncs.automation.resource-headroom-protected-rerun/1",
+  "campaign_id": "cmp_mncs_continuity_20261010",
+  "identity": "ev_automation_resource_headroom_protected_rerun_20261013",
+  "owner": "mncs-automation",
+  "session_id": "ses_7226fbcfe65820f7",
+  "recorded_at": "2026-10-13T04:37:24Z",
+  "source": {
+    "repository": "mncs-automation",
+    "branch": "main",
+    "commit": "e82ccea4471aec3d908e74f8f3dc7a5f1117fe12",
+    "working_tree_clean_before_run": true,
+    "files": [
+      {
+        "path": "native/mncs/automation/evaluation.mncs",
+        "sha256": "220982e7481cf89bcc03dd6435e24fc06c1b034b65c4b8e47a8e2f66e98cc302"
+      },
+      {
+        "path": "tools/automation/conditions.py",
+        "sha256": "1c93ea24f7c527f50db68da745c7c6cb8ff0dab80d70047ca6603622d8cda559"
+      },
+      {
+        "path": "tools/automation/engine.py",
+        "sha256": "82ba71990842333814932c88de2015c15d40021ee5cc587cf974d6e9678909b6"
+      },
+      {
+        "path": "tests/test_automation.py",
+        "sha256": "2953c5e2d10377ca6905e640d67f5042b82d33100f74b3988729e0eef1e9b0bc"
+      }
+    ]
+  },
+  "protected_execution": {
+    "provider": "MNCS Control terminal_exec",
+    "project": "mncs-automation",
+    "scope": "project",
+    "cwd": "/workspace/mncs-automation",
+    "sandbox_backend": "bwrap",
+    "network": false,
+    "started_at": "2026-10-13T04:36:44.784089Z",
+    "completed_at": "2026-10-13T04:37:24.083016Z",
+    "duration_seconds": 39.299
+  },
+  "test": {
+    "command": "python3 -m unittest tests.test_automation -k resource_headroom",
+    "exit_code": 0,
+    "timed_out": false,
+    "output_truncated": false,
+    "passed": 5,
+    "failed": 0,
+    "stderr_summary": "Ran 5 tests in 39.130s; OK"
+  },
+  "coverage": {
+    "resource_headroom_condition_and_native_decision_retested": true,
+    "production_automation_tick_path_included_by_selected_tests": true,
+    "synthetic_monitor_and_forge_facts_used_by_tests": true,
+    "real_compiler_execution_proven": false,
+    "real_forge_receipt_correlated": false,
+    "subsequent_scheduling_decision_from_real_execution_proven": false,
+    "stage1_proven": false,
+    "stage2_proven": false
+  }
+}
