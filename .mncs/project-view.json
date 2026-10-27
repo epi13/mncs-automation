@@ -15,6 +15,9 @@
       "fingerprint_sources": [
         "native/",
         "tools/automation/native.py",
+        "tools/automation/conditions.py",
+        "tools/automation/codes.py",
+        "tools/automation/model.py",
         "tests/test_automation.py"
       ],
       "kind": "native-tick-decision",
@@ -22,9 +25,38 @@
       "version": "1"
     },
     {
+      "contract": "automation-resource-headroom-evaluation",
+      "effects": [
+        "read"
+      ],
+      "fingerprint_sources": [
+        "native/mncs/automation/evaluation.mncs",
+        "tools/automation/conditions.py",
+        "tools/automation/provider_inputs.py",
+        "tools/automation/cli.py",
+        "tests/test_automation.py"
+      ],
+      "invocation": {
+        "fixed_argv": [
+          "resource-evaluate"
+        ],
+        "kind": "python",
+        "path": "tools/mncs_automation.py",
+        "toolchain": {
+          "path": "target/release/mncs",
+          "repository": "mncs-language"
+        },
+        "toolchain_env": "MNCS_BIN"
+      },
+      "kind": "read-only-resource-headroom-decision",
+      "stability": "experimental",
+      "version": "1"
+    },
+    {
       "contract": "automation-occurrence",
       "fingerprint_sources": [
         "tools/automation/engine.py",
+        "tools/automation/conditions.py",
         "tests/test_automation.py"
       ],
       "kind": "occurrence-and-invocation-record",
@@ -221,7 +253,7 @@
   "purpose": "mncs-automation owns persistent automation semantics (definitions, schedules, watches, occurrences, invocation intent); execution, planning, actions, events, telemetry, verdicts, and provenance stay with their owning subsystems.",
   "repository": "mncs-automation",
   "schema_version": "mncs.project-view/1",
-  "source_identity": "sha256:fb0bb02f5e1ed6e8b97ebc69248780fc2ee0ac9db031ffb2518332e67defe735",
+  "source_identity": "sha256:273823899b3bfc65762ae40cb75d2744cf977c111581e47e9fa1fd8173390ded",
   "structure": {
     "layout": "mncs.repository-layout/1",
     "surfaces": [

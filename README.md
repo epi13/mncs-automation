@@ -12,6 +12,7 @@ Declared capabilities (declarations do not establish execution health):
 - `automation-evaluation/1` — native-tick-decision (experimental)
 - `automation-occurrence/1` — occurrence-and-invocation-record (experimental)
 - `automation-reconciliation/1` — native-reconcile-decision (experimental)
+- `automation-resource-headroom-evaluation/1` — read-only-resource-headroom-decision (experimental)
 - `automation-revisit/1` — native-revisit-decision (experimental)
 - `coherence-artifact-reconcile/1` — bounded-provider-artifact-reconcile (experimental)
 - `coherence-routing/1` — native-affected-pass-decision (experimental)
